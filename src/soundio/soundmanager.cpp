@@ -540,7 +540,7 @@ SoundDeviceStatus SoundManager::setupDevices() {
     // Get all outputs for each device
     QHash<SoundDevicePointer, QList<AudioOutput>> deviceOutputs;
     for (const auto& pDevice : std::as_const(m_devices)) {
-        deviceOutputs[pDevice] = m_config.getOutputs().values(pDevice->getDeviceId());
+        deviceOutputs.insert(pDevice, m_config.getOutputs().values(pDevice->getDeviceId()));
         // Statically connect the Network Device to the Sidechain
         if (pDevice->getDeviceId().name == kNetworkDeviceInternalName) {
             AudioOutput out(AudioPathType::RecordBroadcast,
