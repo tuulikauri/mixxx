@@ -136,7 +136,87 @@
           <BindProperty>visible</BindProperty>
         </Connection>
       </StatusLight>
+      
+      <WidgetGroup>
+        <ObjectName>MidiClockWidget</ObjectName>
+        <Layout>horizontal</Layout>
+        <SizePolicy>min,min</SizePolicy>
+        <Children>
+          <Template src="skin:/controls/button_2state_persist.xml">
+            <SetVariable name="TooltipId">midiclock_enabled</SetVariable>
+            <SetVariable name="ObjectName">GuiToggleButton</SetVariable>
+            <SetVariable name="Size">35f,20f</SetVariable>
+            <SetVariable name="state_0_text">Midi</SetVariable>
+            <SetVariable name="state_1_text">Midi</SetVariable>
+            <SetVariable name="ConfigKey">[MidiClock],out_enabled</SetVariable>
+          </Template>
+          <Number>
+            <TooltipId>num_bar</TooltipId>
+            <ObjectName>MidiClockBars</ObjectName>
+            <Size>25f,0min</Size>
+            <NumberOfDigits>0</NumberOfDigits>
+            <Alignment>center</Alignment>
+            <Connection>
+              <ConfigKey>[MidiClock],num_bar</ConfigKey>
+            </Connection>
+          </Number>
+          <Number>
+            <TooltipId>num_beat</TooltipId>
+            <ObjectName>MidiClockBeats</ObjectName>
+            <Size>25f,0min</Size>
+            <NumberOfDigits>0</NumberOfDigits>
+            <Alignment>center</Alignment>
+            <Connection>
+              <ConfigKey>[MidiClock],num_beat</ConfigKey>
+            </Connection>
+          </Number>          
+          <Number>
+            <TooltipId>num_16th</TooltipId>
+            <ObjectName>MidiClock16ths</ObjectName>
+            <Size>25f,0min</Size>
+            <NumberOfDigits>0</NumberOfDigits>
+            <Alignment>center</Alignment>
+            <Connection>
+              <ConfigKey>[MidiClock],num_16th</ConfigKey>
+            </Connection>
+          </Number>
+          <PushButton>
+            <TooltipId>num_16th</TooltipId>
+            <ObjectName>MidiClock16ths</ObjectName>
+            <Size>25f,0min</Size>
+            <NumberOfDigits>0</NumberOfDigits>
+            <Alignment>center</Alignment>
+            <Connection>
+              <ConfigKey>[MidiClock],num_16th</ConfigKey>
+              <Transform>
+                <Add>1</Add>
+              </Transform>
+            </Connection>
+          </PushButton>
 
+          <Template src="skin:/controls/button_2state.xml">
+            <SetVariable name="TooltipId">num_16th</SetVariable>
+            <SetVariable name="ObjectName">MidiClock16ths</SetVariable>
+            <SetVariable name="Size">25f,0min</SetVariable>
+            <SetVariable name="state_0_text">Speed Up</SetVariable>
+            <SetVariable name="state_1_text">Speed Up</SetVariable>
+            <SetVariable name="ConfigKey">[MidiClock],num_16th</SetVariable>
+          </Template>
+
+          <Label>
+            <ObjectName>MidiClockLabel</ObjectName>
+            <TooltipId>midiclock_usage</TooltipId>
+            <Size>0min,10f</Size>
+            <Alignment>center</Alignment>
+            <Text> MIDI Clock </Text>
+          </Label>
+        </Children>
+      </WidgetGroup>
+
+      <WidgetGroup>
+        <Size>100f,1min</Size>
+      </WidgetGroup>
+     
       <WidgetGroup>
         <ObjectName>AbletonLinkWidget</ObjectName>
         <Layout>horizontal</Layout>

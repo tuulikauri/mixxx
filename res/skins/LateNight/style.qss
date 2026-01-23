@@ -401,6 +401,10 @@ WOverview QLabel {
     }
   #LatencyLabel {
   }
+  #MidiClockWidget{
+    background-color: #561134;
+    padding: 4px;
+  }
 /************** ToolBar *******************************************************/
 
 
