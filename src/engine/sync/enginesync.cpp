@@ -4,6 +4,7 @@
 
 #include "engine/channels/enginechannel.h"
 #include "engine/enginebuffer.h"
+#include "engine/sync/midiclockout.h"
 #include "engine/sync/abletonlink.h"
 #include "engine/sync/internalclock.h"
 #include "util/assert.h"
@@ -13,6 +14,7 @@ namespace {
 const mixxx::Logger kLogger("EngineSync");
 const QString kInternalClockGroup = QStringLiteral("[InternalClock]");
 const QString kAbletonLinkGroup = QStringLiteral("[AbletonLink]");
+const QString kMidiClockOutGroup = QStringLiteral("[MidiClockOut]");
 constexpr mixxx::Bpm kDefaultBpm = mixxx::Bpm(124.0);
 } // anonymous namespace
 
@@ -20,6 +22,7 @@ EngineSync::EngineSync(UserSettingsPointer pConfig)
         : m_pConfig(pConfig),
           m_pInternalClock(new InternalClock(kInternalClockGroup, this)),
           m_pAbletonLink(new AbletonLink(kAbletonLinkGroup, this)),
+          m_pMidiClockOut(new MidiClockOut(kMidiClockOutGroup, this)),
           m_pLeaderSyncable(nullptr) {
     qRegisterMetaType<SyncMode>("SyncMode");
     m_pInternalClock->updateLeaderBpm(kDefaultBpm);
@@ -31,6 +34,7 @@ EngineSync::~EngineSync() {
     m_pConfig->setValue(ConfigKey(kInternalClockGroup, "bpm"),
             bpm.isValid() ? bpm.value() : mixxx::Bpm::kValueUndefined);
     delete m_pAbletonLink;
+    delete m_pMidiClockOut;
     delete m_pInternalClock;
 }
 
