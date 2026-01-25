@@ -1,5 +1,6 @@
 #pragma once
 #include <ableton/platforms/stl/Clock.hpp>
+#include <QTimer>
 #include "control/controlpushbutton.h"
 #include "engine/channels/enginechannel.h"
 #include "engine/enginebuffer.h"
@@ -81,6 +82,9 @@ class MidiClockOut : public QObject, public Syncable {
     /// occur.
     void updateInstantaneousBpm(mixxx::Bpm bpm) override;
 
+    void onCallbackStart(std::chrono::microseconds absTimeWhenPrevOutputBufferReachesDac);
+    void onCallbackEnd(int sampleRate, size_t bufferSize);
+
     void testMessage();
 
     void tick();
@@ -88,14 +92,55 @@ class MidiClockOut : public QObject, public Syncable {
     void fwdSixteenth();
 
   private:
+    // ableton::link::HostTimeFilter<MixxxClockRef> m_hostTimeFilter;
+
+    QChronoTimer ticknsTimer = QChronoTimer(nullptr);
+    Qt::TimerId ticknsTimerID;
+
     QString m_group;
     EngineSync* m_pEngineSync; // unowned, must outlive this.
     SyncMode m_syncMode;
 
     mixxx::Bpm m_oldTempo;
+    mixxx::Bpm currentBpm;
+    mixxx::Bpm newBpm;
+    double dnewBpm;
+
 
     std::chrono::microseconds m_absTimeWhenPrevOutputBufferReachesDac;
+    std::chrono::microseconds nextTickTime;
+    std::chrono::microseconds plannedNextTickTime;    
+    std::chrono::microseconds newNextTickTime;
+    std::chrono::microseconds differenceTickLength;
 
+    std::chrono::microseconds timeReceivedNewLeaderBpmLate;    
+    std::chrono::microseconds maximumNextTickCutoffTime;
+    
+
+    std::chrono::microseconds tickLengthFromBpm(double bpm);
+    std::chrono::microseconds currentTickLength;
+    std::chrono::microseconds newTickLength;
+    std::chrono::microseconds tickCutOff;
+
+    mixxx::audio::FramePos beatDistance;
+
+    bool flag_plannedTickWillBeLate;
+    bool flag_useNewInsteadOfPlannedTickTime;
+
+    bool enabled;   
+
+    /// 24PPQN ticks     
+    uint32_t tickCount;
+    uint8_t sixteenths;
+    uint8_t beats;
+    uint32_t bars;
+    int32_t tickError;
+
+    bool skipNextTick;    
+
+    void skipTick();
+
+    //Control objects
     std::unique_ptr<ControlPushButton> m_pMidiClockEnableButton;
     std::unique_ptr<ControlPushButton> m_pMidiClockTickButton;
     std::unique_ptr<ControlPushButton> m_pMidiClockNudgeFwdButton;
@@ -103,14 +148,6 @@ class MidiClockOut : public QObject, public Syncable {
     std::unique_ptr<ControlObject> m_pMidiClockPosSixteenths;
     std::unique_ptr<ControlObject> m_pMidiClockPosBeats;
     std::unique_ptr<ControlObject> m_pMidiClockPosBars;
-    
-    bool m_enabled;
-
-    /// 24PPQN ticks     
-    uint32_t tickCount;
-    uint8_t sixteenths;
-    uint8_t beats;
-    uint32_t bars;
 
     /// ControlObject handle for enabling / disabling MidiClockOut pulses
     void slotControlOutEnabled(double controlButtonValue);

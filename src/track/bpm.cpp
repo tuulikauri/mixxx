@@ -4,6 +4,7 @@ namespace mixxx {
 
 /*static*/ constexpr double Bpm::kValueUndefined;
 /*static*/ constexpr double Bpm::kValueMin;
+constexpr double Bpm::kValueReasonableMin;
 
 double Bpm::valueFromString(const QString& str, bool* pValid) {
     if (pValid) {

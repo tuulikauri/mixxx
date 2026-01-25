@@ -225,6 +225,7 @@ void EngineSync::deactivateSync(Syncable* pSyncable) {
 }
 
 Syncable* EngineSync::pickLeader(Syncable* triggering_syncable, bool newStatus) {
+    // TODO: Dont allow MidiClockOut to become leader
     if (kLogger.traceEnabled()) {
         kLogger.trace() << "pickLeader";
     }
@@ -346,7 +347,7 @@ Syncable* EngineSync::findBpmMatchTarget(Syncable* requester) {
     Syncable* pStoppedNonSyncTarget = nullptr;
 
     for (const auto& pOtherSyncable : std::as_const(m_syncables)) {
-        if (pOtherSyncable == requester) {
+        if (pOtherSyncable == requester) { // TODO: or, if pOtherSyncable == MidiClockOut
             continue;
         }
         // Skip non-leader decks, like preview decks.
