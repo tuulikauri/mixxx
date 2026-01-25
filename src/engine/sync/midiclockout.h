@@ -1,6 +1,7 @@
 #pragma once
 #include <ableton/platforms/stl/Clock.hpp>
 #include <QTimer>
+#include <QChronoTimer>
 #include "control/controlpushbutton.h"
 #include "engine/channels/enginechannel.h"
 #include "engine/enginebuffer.h"
