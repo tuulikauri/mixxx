@@ -91,6 +91,13 @@ class MidiClockOut : public QObject, public Syncable {
     void tick();
     void backSixteenth();
     void fwdSixteenth();
+  
+  private slots:    
+    void slotControlOutEnabled(double controlButtonValue);
+    void slotControlRestart(double controlButtonValue);
+    void slotControlTick(double controlButtonValue);
+    void slotControlNudgeFwd(double controlButtonValue);
+    void slotControlNudgeBack(double controlButtonValue);
 
   private:
     // ableton::link::HostTimeFilter<MixxxClockRef> m_hostTimeFilter;
@@ -121,12 +128,13 @@ class MidiClockOut : public QObject, public Syncable {
     std::chrono::microseconds tickLengthFromBpm(double bpm);
     std::chrono::microseconds currentTickLength;
     std::chrono::microseconds newTickLength;
-    std::chrono::microseconds tickCutOff;
+    std::chrono::microseconds tickCutOff;    
 
     mixxx::audio::FramePos beatDistance;
 
     bool flag_plannedTickWillBeLate;
     bool flag_useNewInsteadOfPlannedTickTime;
+    bool flag_bpmChangedThisBar;
 
     bool enabled;   
 
@@ -141,8 +149,12 @@ class MidiClockOut : public QObject, public Syncable {
 
     void skipTick();
 
+    //Restart all tick counters, all bpm adjusters, and the tick clock (if its running)
+    void restart();
+
     //Control objects
     std::unique_ptr<ControlPushButton> m_pMidiClockEnableButton;
+    std::unique_ptr<ControlPushButton> m_pMidiClockRestartButton;
     std::unique_ptr<ControlPushButton> m_pMidiClockTickButton;
     std::unique_ptr<ControlPushButton> m_pMidiClockNudgeFwdButton;
     std::unique_ptr<ControlPushButton> m_pMidiClockNudgeBackButton;
@@ -150,15 +162,17 @@ class MidiClockOut : public QObject, public Syncable {
     std::unique_ptr<ControlObject> m_pMidiClockPosBeats;
     std::unique_ptr<ControlObject> m_pMidiClockPosBars;
 
-    /// ControlObject handle for enabling / disabling MidiClockOut pulses
-    void slotControlOutEnabled(double controlButtonValue);
-    void slotControlTick(double controlButtonValue);
-    void slotControlNudgeFwd(double controlButtonValue);
-    void slotControlNudgeBack(double controlButtonValue);
-
     std::chrono::microseconds getHostTime() const;
     std::chrono::microseconds getHostTimeAtSpeaker(std::chrono::microseconds hostTime) const;
 
     // Test/Debug code
 
-};
+    std::chrono::microseconds barLengthMeasured;
+    std::chrono::microseconds barLengthError;
+    std::chrono::steady_clock::time_point startTime;
+    std::chrono::steady_clock::time_point endTime;
+
+    uint32_t debugTickCounter;
+
+    void debugBarTime();
+    };

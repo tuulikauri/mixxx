@@ -509,6 +509,7 @@ void EngineSync::notifySeek(Syncable* pSyncable, mixxx::audio::FramePos position
         double beatDistance = pSyncable->getBeatDistance();
         updateLeaderBeatDistance(pSyncable, beatDistance);
         m_pAbletonLink->updateLeaderBeatDistance(beatDistance);
+        m_pMidiClockOut->updateLeaderBeatDistance(beatDistance);
     }
 }
 
@@ -664,11 +665,13 @@ void EngineSync::onCallbackStart(mixxx::audio::SampleRate sampleRate,
         std::chrono::microseconds absTimeWhenPrevOutputBufferReachesDac) {
     m_pInternalClock->onCallbackStart(sampleRate, bufferSize);
     m_pAbletonLink->onCallbackStart(absTimeWhenPrevOutputBufferReachesDac);
+    m_pMidiClockOut->onCallbackStart(absTimeWhenPrevOutputBufferReachesDac);
 }
 
 void EngineSync::onCallbackEnd(mixxx::audio::SampleRate sampleRate, std::size_t bufferSize) {
     m_pInternalClock->onCallbackEnd(sampleRate, bufferSize);
     m_pAbletonLink->onCallbackEnd(sampleRate, bufferSize);
+    m_pMidiClockOut->onCallbackEnd(sampleRate, bufferSize);
 }
 
 EngineChannel* EngineSync::getLeaderChannel() const {
@@ -729,6 +732,9 @@ void EngineSync::updateLeaderBpm(Syncable* pSource, mixxx::Bpm bpm) {
     }
     if (pSource != m_pAbletonLink) {
         m_pAbletonLink->updateLeaderBpm(bpm);
+    }
+    if (pSource != m_pMidiClockOut) {
+        m_pMidiClockOut->updateLeaderBpm(bpm);
     }
     foreach (Syncable* pSyncable, m_syncables) {
         if (pSyncable == pSource ||
@@ -820,6 +826,9 @@ void EngineSync::reinitLeaderParams(Syncable* pSource) {
     }
     if (pSource != m_pAbletonLink) {
         m_pAbletonLink->reinitLeaderParams(beatDistance, baseBpm, bpm);
+    }
+    if (pSource != m_pMidiClockOut) {
+        m_pMidiClockOut->reinitLeaderParams(beatDistance, baseBpm, bpm);
     }
     foreach (Syncable* pSyncable, m_syncables) {
         if (!pSyncable->isSynchronized()) {

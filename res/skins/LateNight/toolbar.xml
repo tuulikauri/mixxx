@@ -150,23 +150,15 @@
             <SetVariable name="state_1_text">Send</SetVariable>
             <SetVariable name="ConfigKey">[MidiClockOut],out_enabled</SetVariable>
           </Template>
-          
-          <Template src="skin:/controls/button_1state.xml">
-            <SetVariable name="TooltipId">midiclock_enabled</SetVariable>
-            <SetVariable name="ObjectName">GuiToggleButton</SetVariable>
-            <SetVariable name="Size">35f,20f</SetVariable>
-            <SetVariable name="state_0_text">Tick</SetVariable>          
-            <SetVariable name="ConfigKey">[MidiClockOut],tick</SetVariable>
-          </Template>
 
           <Template src="skins:LateNight/controls/button_1state_right.xml">
-            <SetVariable name="TooltipId">midiclock_nudge_fwd</SetVariable>
-            <SetVariable name="ObjectName">RateTempUp</SetVariable>
+            <SetVariable name="TooltipId">midiclock_restart</SetVariable>
+            <SetVariable name="ObjectName">Reverse</SetVariable>
             <SetVariable name="Size">26f,26f</SetVariable>
-            <SetVariable name="ConfigKey">[MidiClockOut],nudge_fwd</SetVariable>
-            <SetVariable name="ConfigKeyRight">[MidiClockOut],nudge_fwd</SetVariable>
-          </Template>
-
+            <SetVariable name="ConfigKey">[MidiClockOut],restart</SetVariable>
+            <SetVariable name="ConfigKeyRight">[MidiClockOut],restart</SetVariable>
+          </Template>         
+          
           <Template src="skins:LateNight/controls/button_1state_right.xml">
             <SetVariable name="TooltipId">midiclock_nudge_back</SetVariable>
             <SetVariable name="ObjectName">RateTempDown</SetVariable>
@@ -175,12 +167,20 @@
             <SetVariable name="ConfigKeyRight">[MidiClockOut],nudge_back</SetVariable>
           </Template>
           
+          <Template src="skins:LateNight/controls/button_1state_right.xml">
+            <SetVariable name="TooltipId">midiclock_nudge_fwd</SetVariable>
+            <SetVariable name="ObjectName">RateTempUp</SetVariable>
+            <SetVariable name="Size">26f,26f</SetVariable>
+            <SetVariable name="ConfigKey">[MidiClockOut],nudge_fwd</SetVariable>
+            <SetVariable name="ConfigKeyRight">[MidiClockOut],nudge_fwd</SetVariable>
+          </Template>
+          
           <Number>
             <TooltipId>num_bars</TooltipId>
             <ObjectName>MidiClockBars</ObjectName>
-            <Size>25f,0min</Size>
+            <Size>30f,0min</Size>
             <NumberOfDigits>0</NumberOfDigits>
-            <Alignment>center</Alignment>
+            <Alignment>right</Alignment>
             <Connection>
               <ConfigKey>[MidiClockOut],num_bars</ConfigKey>
             </Connection>
@@ -188,9 +188,9 @@
           <Number>
             <TooltipId>num_beats</TooltipId>
             <ObjectName>MidiClockBeats</ObjectName>
-            <Size>25f,0min</Size>
+            <Size>20f,0min</Size>
             <NumberOfDigits>0</NumberOfDigits>
-            <Alignment>center</Alignment>
+            <Alignment>right</Alignment>
             <Connection>
               <ConfigKey>[MidiClockOut],num_beats</ConfigKey>
             </Connection>
@@ -198,14 +198,22 @@
           <Number>
             <TooltipId>num_sixteenths</TooltipId>
             <ObjectName>MidiClockSixteenths</ObjectName>
-            <Size>25f,0min</Size>
+            <Size>20f,0min</Size>
             <NumberOfDigits>0</NumberOfDigits>
-            <Alignment>center</Alignment>
+            <Alignment>right</Alignment>
             <Connection>
               <ConfigKey>[MidiClockOut],num_sixteenths</ConfigKey>
             </Connection>
           </Number>
 
+          <Template src="skin:/controls/button_1state.xml">
+            <SetVariable name="TooltipId">midiclock_enabled</SetVariable>
+            <SetVariable name="ObjectName">GuiToggleButton</SetVariable>
+            <SetVariable name="Size">35f,20f</SetVariable>
+            <SetVariable name="state_0_text">Tick</SetVariable>
+            <SetVariable name="ConfigKey">[MidiClockOut],tick</SetVariable>
+          </Template>
+          
           <Label>
             <ObjectName>MidiClockLabel</ObjectName>
             <TooltipId>midiclock_usage</TooltipId>
