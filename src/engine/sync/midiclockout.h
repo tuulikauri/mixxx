@@ -1,6 +1,15 @@
 #pragma once
 #include <ableton/platforms/stl/Clock.hpp>
-#include <QTimer>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0) 
+#include <QChronoTimer> 
+using QChronoTimerType = QChronoTimer; 
+using timerDurationType = std::chrono::nanoseconds;
+#else 
+#include <QTimer> 
+using QChronoTimerType = QTimer; 
+using timerDurationType = std::chrono::milliseconds;
+
+#endif
 #include <QChronoTimer>
 #include "control/controlpushbutton.h"
 #include "engine/channels/enginechannel.h"
@@ -102,7 +111,7 @@ class MidiClockOut : public QObject, public Syncable {
   private:
     // ableton::link::HostTimeFilter<MixxxClockRef> m_hostTimeFilter;
 
-    QChronoTimer ticknsTimer = QChronoTimer(nullptr);
+    QChronoTimerType ticknsTimer = QChronoTimerType(nullptr);
     Qt::TimerId ticknsTimerID;
 
     QString m_group;
