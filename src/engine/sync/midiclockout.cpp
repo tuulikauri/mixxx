@@ -36,7 +36,7 @@
 #include <QtDebug>
 #include <cmath>
 
-#include <QChronoTimer>
+//#include <QChronoTimer>
 
 #include "control/controlobject.h"
 #include "engine/sync/enginesync.h"
@@ -128,6 +128,12 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
 
     //Other setup
 
+    #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0) 
+    qDebug() << "MidiClockOut::constructor(): Qt>=6.8, using QChronoTimer; nanosecond resolution";
+    #else
+    qDebug() << "MidiClockOut::constructor(): Qt<6.8, using QTimer; millisecond resolution only";
+    #endif
+
     ticknsTimer.setParent(this);
     ticknsTimer.callOnTimeout(this, &MidiClockOut::tick);
  
@@ -200,7 +206,7 @@ void MidiClockOut::slotControlOutEnabled(double controlButtonValue) {
     qDebug() << "MidiClockOut::slotControlOutEnabled():" << controlButtonValue;
     enabled = (controlButtonValue > 0);
     if (enabled) {        
-        ticknsTimer.setInterval(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        ticknsTimer.setInterval(std::chrono::duration_cast<timerDurationType>(
             tickLengthFromBpm(currentBpm.value())));            
         ticknsTimer.start();        
         ticknsTimerID = ticknsTimer.id();
@@ -457,7 +463,7 @@ void MidiClockOut::tick() {
         qDebug() << "MidiClockOut::tick():newbpm";
         currentBpm = newBpm;
         currentTickLength = tickLengthFromBpm(currentBpm.value());
-        ticknsTimer.setInterval(std::chrono::duration_cast<std::chrono::nanoseconds>(currentTickLength));
+        ticknsTimer.setInterval(std::chrono::duration_cast<timerDurationType>(currentTickLength));
         ticknsTimer.start();        
         ticknsTimerID = ticknsTimer.id();    
         flag_bpmChangedThisBar = true;

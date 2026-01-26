@@ -385,6 +385,52 @@ jobs:
           sudo rm -rf /usr/share/dotnet            # Free up 3.4G
           sudo rm -rf /usr/share/swift             # Free up 3.2G
           sudo rm -rf /usr/local/share/vcpkg       # Size unknown, but obvious duplicate
+      
+      #Qt 6.8
+      - name: "[windows] Install Qt 6.8"
+        if: startsWith(matrix.os, 'windows') && !contains(matrix.os, 'arm')
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: 6.8.* # Specifies the desired Qt version
+          # Specify modules if needed (Qt Core is part of the base installation)
+          modules: 'qtbase multimedia qt5compat qtdeclarative qtkeychain-qt6 qtsvg qttranslations qtmultimedia qtmultimediawidgets qtscript qtxmlpatterns'
+          host: 'windows'
+          
+      - name: "[windows Arm64] Install Qt 6.8"
+        if: startsWith(matrix.os, 'windows') && contains(matrix.os, 'arm')
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: 6.8.* # Specifies the desired Qt version
+          # Specify modules if needed (Qt Core is part of the base installation)
+          modules: 'qtbase multimedia qt5compat qtdeclarative qtkeychain-qt6 qtsvg qttranslations qtmultimedia qtmultimediawidgets qtscript qtxmlpatterns'
+          host: 'windows_arm64'
+
+      - name: "[mac] Install Qt 6.8"
+        if: startsWith(matrix.os, 'mac')
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: 6.8.* # Specifies the desired Qt version
+          # Specify modules if needed (Qt Core is part of the base installation)
+          modules: 'qtbase multimedia qt5compat qtdeclarative qtkeychain-qt6 qtsvg qttranslations qtmultimedia qtmultimediawidgets qtscript qtxmlpatterns'
+          host: 'mac'
+
+      - name: "[linux] Install Qt 6.8"
+        if: startsWith(matrix.os, 'linux')
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: 6.8.* # Specifies the desired Qt version
+          # Specify modules if needed (Qt Core is part of the base installation)
+          modules: 'qtbase multimedia qt5compat qtdeclarative qtkeychain-qt6 qtsvg qttranslations qtmultimedia qtmultimediawidgets qtscript qtxmlpatterns'
+          host: 'linux'
+
+      - name: "[linux Arm64] Install Qt 6.8"
+        if: startsWith(matrix.os, 'linux')
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: 6.8.* # Specifies the desired Qt version
+          # Specify modules if needed (Qt Core is part of the base installation)
+          modules: 'qtbase multimedia qt5compat qtdeclarative qtkeychain-qt6 qtsvg qttranslations qtmultimedia qtmultimediawidgets qtscript qtxmlpatterns'
+          host: 'linux_arm64'          
 
       - name: "Create build directory"
         run: mkdir build
