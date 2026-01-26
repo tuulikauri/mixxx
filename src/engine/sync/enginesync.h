@@ -7,6 +7,7 @@
 
 class InternalClock;
 class AbletonLink;
+class MidiClockOut;
 class EngineChannel;
 
 const QString kBpmConfigGroup = QStringLiteral("[BPM]");
@@ -168,8 +169,12 @@ class EngineSync : public SyncableListener {
     InternalClock* m_pInternalClock;
     /// The Ableton Link syncable.
     AbletonLink* m_pAbletonLink;
+    /// The MidiClockOut syncable.
+    MidiClockOut* m_pMidiClockOut;
     /// The current Syncable that is the leader.
     Syncable* m_pLeaderSyncable;
     /// The list of all Syncables registered via addSyncableDeck.
     QList<Syncable*> m_syncables;
+
+
 };

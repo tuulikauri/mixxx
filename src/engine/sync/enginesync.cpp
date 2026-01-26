@@ -4,6 +4,7 @@
 
 #include "engine/channels/enginechannel.h"
 #include "engine/enginebuffer.h"
+#include "engine/sync/midiclockout.h"
 #include "engine/sync/abletonlink.h"
 #include "engine/sync/internalclock.h"
 #include "util/assert.h"
@@ -13,6 +14,7 @@ namespace {
 const mixxx::Logger kLogger("EngineSync");
 const QString kInternalClockGroup = QStringLiteral("[InternalClock]");
 const QString kAbletonLinkGroup = QStringLiteral("[AbletonLink]");
+const QString kMidiClockOutGroup = QStringLiteral("[MidiClockOut]");
 constexpr mixxx::Bpm kDefaultBpm = mixxx::Bpm(124.0);
 } // anonymous namespace
 
@@ -20,6 +22,7 @@ EngineSync::EngineSync(UserSettingsPointer pConfig)
         : m_pConfig(pConfig),
           m_pInternalClock(new InternalClock(kInternalClockGroup, this)),
           m_pAbletonLink(new AbletonLink(kAbletonLinkGroup, this)),
+          m_pMidiClockOut(new MidiClockOut(kMidiClockOutGroup, this)),
           m_pLeaderSyncable(nullptr) {
     qRegisterMetaType<SyncMode>("SyncMode");
     m_pInternalClock->updateLeaderBpm(kDefaultBpm);
@@ -31,6 +34,7 @@ EngineSync::~EngineSync() {
     m_pConfig->setValue(ConfigKey(kInternalClockGroup, "bpm"),
             bpm.isValid() ? bpm.value() : mixxx::Bpm::kValueUndefined);
     delete m_pAbletonLink;
+    delete m_pMidiClockOut;
     delete m_pInternalClock;
 }
 
@@ -221,6 +225,7 @@ void EngineSync::deactivateSync(Syncable* pSyncable) {
 }
 
 Syncable* EngineSync::pickLeader(Syncable* triggering_syncable, bool newStatus) {
+    // TODO: Dont allow MidiClockOut to become leader
     if (kLogger.traceEnabled()) {
         kLogger.trace() << "pickLeader";
     }
@@ -342,7 +347,7 @@ Syncable* EngineSync::findBpmMatchTarget(Syncable* requester) {
     Syncable* pStoppedNonSyncTarget = nullptr;
 
     for (const auto& pOtherSyncable : std::as_const(m_syncables)) {
-        if (pOtherSyncable == requester) {
+        if (pOtherSyncable == requester) { // TODO: or, if pOtherSyncable == MidiClockOut
             continue;
         }
         // Skip non-leader decks, like preview decks.
@@ -504,6 +509,7 @@ void EngineSync::notifySeek(Syncable* pSyncable, mixxx::audio::FramePos position
         double beatDistance = pSyncable->getBeatDistance();
         updateLeaderBeatDistance(pSyncable, beatDistance);
         m_pAbletonLink->updateLeaderBeatDistance(beatDistance);
+        m_pMidiClockOut->updateLeaderBeatDistance(beatDistance);
     }
 }
 
@@ -659,11 +665,13 @@ void EngineSync::onCallbackStart(mixxx::audio::SampleRate sampleRate,
         std::chrono::microseconds absTimeWhenPrevOutputBufferReachesDac) {
     m_pInternalClock->onCallbackStart(sampleRate, bufferSize);
     m_pAbletonLink->onCallbackStart(absTimeWhenPrevOutputBufferReachesDac);
+    m_pMidiClockOut->onCallbackStart(absTimeWhenPrevOutputBufferReachesDac);
 }
 
 void EngineSync::onCallbackEnd(mixxx::audio::SampleRate sampleRate, std::size_t bufferSize) {
     m_pInternalClock->onCallbackEnd(sampleRate, bufferSize);
     m_pAbletonLink->onCallbackEnd(sampleRate, bufferSize);
+    m_pMidiClockOut->onCallbackEnd(sampleRate, bufferSize);
 }
 
 EngineChannel* EngineSync::getLeaderChannel() const {
@@ -724,6 +732,9 @@ void EngineSync::updateLeaderBpm(Syncable* pSource, mixxx::Bpm bpm) {
     }
     if (pSource != m_pAbletonLink) {
         m_pAbletonLink->updateLeaderBpm(bpm);
+    }
+    if (pSource != m_pMidiClockOut) {
+        m_pMidiClockOut->updateLeaderBpm(bpm);
     }
     foreach (Syncable* pSyncable, m_syncables) {
         if (pSyncable == pSource ||
@@ -815,6 +826,9 @@ void EngineSync::reinitLeaderParams(Syncable* pSource) {
     }
     if (pSource != m_pAbletonLink) {
         m_pAbletonLink->reinitLeaderParams(beatDistance, baseBpm, bpm);
+    }
+    if (pSource != m_pMidiClockOut) {
+        m_pMidiClockOut->reinitLeaderParams(beatDistance, baseBpm, bpm);
     }
     foreach (Syncable* pSyncable, m_syncables) {
         if (!pSyncable->isSynchronized()) {

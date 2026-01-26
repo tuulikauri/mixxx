@@ -12,6 +12,7 @@ class Bpm final {
 public:
     static constexpr double kValueUndefined = 0.0;
     static constexpr double kValueMin = 0.0; // lower bound (exclusive)
+    static constexpr double kValueReasonableMin = 20.0;   // lower bound (exclusive)
     static constexpr double kValueMax = 500.0; // upper bound (inclusive)
 
     constexpr Bpm() noexcept
@@ -45,6 +46,10 @@ public:
         return isValidValue(m_value);
     }
 
+    bool isReasonable() const {
+        return isValidValue(m_value) && (m_value >= kValueReasonableMin);
+    }
+
     /// Return the valid value.
     ///
     /// Triggers a debug assertion if the value is invalid
@@ -60,6 +65,10 @@ public:
     /// if the BPM is invalid/undefined.
     double valueOr(double defaultValue) const {
         return isValid() ? m_value : defaultValue;
+    }
+
+    double reasonableValueOr(double defaultValue) const {
+        return isReasonable() ? m_value : defaultValue;
     }
 
     void setValue(double value) {

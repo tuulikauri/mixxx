@@ -1337,6 +1337,7 @@ add_library(
   src/engine/sidechain/networkinputstreamworker.cpp
   src/engine/sidechain/networkoutputstreamworker.cpp
   src/engine/sync/abletonlink.cpp
+  src/engine/sync/midiclockout.cpp
   src/engine/sync/enginesync.cpp
   src/engine/sync/internalclock.cpp
   src/engine/sync/synccontrol.cpp
@@ -3715,6 +3716,10 @@ if(QT6)
   if(QT_VERSION VERSION_GREATER_EQUAL 6.10)
     # from Qt 6.10 GuiPrivate required for QShader/rendergraph (rhi/qshader.h)
     list(APPEND QT_EXTRA_COMPONENTS "GuiPrivate")
+  endif()
+  if(QT_VERSION VERSION_GREATER_EQUAL 6.8)
+    # from Qt 6.8 CorePrivate required for QTimer/QChronoTimer (sync/midiclockout.h)
+    list(APPEND QT_EXTRA_COMPONENTS "Core")
   endif()
 else()
   find_package(QT 5.12 NAMES Qt5 COMPONENTS Core REQUIRED)
