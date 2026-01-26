@@ -1,28 +1,35 @@
-// TODO: Audio playback / bpm is noticeably slower when mixxx isnt the focussed window; no difference with enabled
+// TODO(Tuuli): Mutexes, semaphors, thread protection
 
-// TODO: Ticks are too slow, why?
+// TODO(Tuuli): Audio playback / bpm is noticeably slower when mixxx isnt the focussed window; no difference with/without MCO enabled
 
-// TODO: midi out, 0xF8, and selecting a Midi device in a controller-mapping
+// TODO(Tuuli): Ticks are too slow, why? Timer? Could time 96 loops without other stuff happening...?
+    // Time 96 ticks and see what the result is
+    // Time the beats from the beat_active or beat_distance controls, and see what the timed BPM is
 
-// TODO: Not grabbing BPM when another playing syncable becomes leader - fixed now? If not, find a way to get Bpm...
-// auto otherBpm = m_pEngineSync->leaderBpm(); // private function
-// auto otherBeatDistance = m_pEngineSync->leaderBaseBpm(); //private function
+// TODO(Tuuli): midi out, 0xF8, and selecting a Midi device in a controller-mapping
 
-// This is the bad way to do it... DONT TRY THIS; a hack, and not thread-safe...
-// EngineChannel* pLeaderChannel = m_pEngineSync->getLeaderChannel();
-// auto leaderBpm = pLeaderChannel->getEngineBuffer()->getBpm();
+// TODO(Tuuli): tests
 
-// other experiments
-//pLeaderChannel->EngineBuffer::getBpm()--
-//  m_pBpmControl->BpmControl::getBpm() --
-//      m_pEngineBpm->get() --
-//          std::unique_ptr<ControlLinPotmeter> m_pEngineBpm --
-//              ControlObject->get()->m_value.get()-- gets value atomically
+// TODO(Tuuli): Not grabbing BPM when another playing syncable becomes leader - fixed now? Test, and remove redundant BPM-hoarding..
+    //If not, find a way to get Bpm...
+    // auto otherBpm = m_pEngineSync->leaderBpm(); // private function
+    // auto otherBeatDistance = m_pEngineSync->leaderBaseBpm(); //private function
 
-//SyncControl::setEngineControls(BpmControl::pBpmControl)
+    // This is the bad way to do it... DONT TRY THIS; a hack, and not thread-safe...
+    // EngineChannel* pLeaderChannel = m_pEngineSync->getLeaderChannel();
+    // auto leaderBpm = pLeaderChannel->getEngineBuffer()->getBpm();
 
-// currently the clock doesnt adopt tempo of a new leader until that leader changes their BPM...
-// Need to capture a notice about the new leader and then pull their BPM.
+    // other experiments
+    //pLeaderChannel->EngineBuffer::getBpm()--
+    //  m_pBpmControl->BpmControl::getBpm() --
+    //      m_pEngineBpm->get() --
+    //          std::unique_ptr<ControlLinPotmeter> m_pEngineBpm --
+    //              ControlObject->get()->m_value.get()-- gets value atomically
+
+    //SyncControl::setEngineControls(BpmControl::pBpmControl)
+
+    // currently the clock doesnt adopt tempo of a new leader until that leader changes their BPM...
+    // Need to capture a notice about the new leader and then pull their BPM.
 
 #include "engine/sync/midiclockout.h"
 
@@ -132,7 +139,7 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
 }
 
 MidiClockOut::~MidiClockOut() {
-    // TODO: Setup a SYSEX command to optionally be sent on exit, that would tell
+    // TODO(Tuuli): Setup a SYSEX command to optionally be sent on exit, that would tell
     // external followers to switch their clocks to internal mode, and set their BPMs
     // with midi.setTempo()
     // (not all sequencers work like LP Pro firmware and treat external 0xF8 as tap tempo..)
@@ -230,7 +237,7 @@ void MidiClockOut::slotControlNudgeBack(double controlButtonValue) {
 
 /// Notify a Syncable that their mode has changed. The Syncable must record
 /// this mode and return the latest mode in response to getMode().
-/// TODO: not Syncable::notifySyncModeChanged?
+/// TODO(Tuuli): not Syncable::notifySyncModeChanged?
 void MidiClockOut::setSyncMode(SyncMode syncMode) {
     m_syncMode = syncMode;
     qDebug() << "MidiClockOut::setSyncMode(), syncMode:" << syncMode;
@@ -253,15 +260,15 @@ void MidiClockOut::notifyUniquePlaying() {
 
 /// Notify a Syncable that they should sync phase.
 void MidiClockOut::requestSync() {
-    // TODO: Is this the correct way to get the leaders phase? Syncable::getBaseBpm() and m_pEngineSync->pickNonSyncSyncTarget()
+    // TODO(Tuuli): Is this the correct way to get the leaders phase? Syncable::getBaseBpm() and m_pEngineSync->pickNonSyncSyncTarget()
     EngineChannel* pLeaderChannel = m_pEngineSync->getLeaderChannel();
     beatDistance = pLeaderChannel->getEngineBuffer()->getExactPlayPos();
 
     uint32_t newTickCount = tickCount - (tickCount % 24) + (beatDistance.value() * 24);
     tickError += newTickCount - tickCount;
-    // TODO: incomplete handling of tickError
+    // TODO(Tuuli): incomplete handling of tickError
 
-    // TODO: should sync tempo as well? Or do we assume this is already handled?
+    // TODO(Tuuli): should sync tempo as well? Or do we assume this is already handled?
     Syncable* target = m_pEngineSync->pickNonSyncSyncTarget(getChannel());
     if (target == nullptr) {
         return;
@@ -285,12 +292,12 @@ bool MidiClockOut::isPlaying() const {
 }
 
 bool MidiClockOut::isAudible() const {
-    // TODO: Should this be marked audible? Potentially external drum machines are.
+    // TODO(Tuuli): Should this be marked audible? Potentially external drum machines are.
     return enabled;
 }
 
 bool MidiClockOut::isQuantized() const {
-    // TODO: Should this be whether it SHOULD BE quantized, or if it thinks its already on-beat?
+    // TODO(Tuuli): Should this be whether it SHOULD BE quantized, or if it thinks its already on-beat?
     return enabled;
 }
 
@@ -303,22 +310,22 @@ double MidiClockOut::getBeatDistance() const {
 }
 
 mixxx::Bpm MidiClockOut::getBaseBpm() const {    
-    return currentBpm; //TODO: whats this for? Half/double?
+    return currentBpm; //TODO(Tuuli): whats this for? Half/double?
 }
 
 void MidiClockOut::updateLeaderBeatDistance(double beatDistance) {    
     qDebug() << "MidiClockOut::updateLeaderBeatDistance()";
-    tickError = (tickCount % 24) + (beatDistance * 24); //TODO: do we want sequencers to keep playing in place, and catch up?    
+    tickError = (tickCount % 24) + (beatDistance * 24); //TODO(Tuuli): do we want sequencers to keep playing in place, and catch up?    
 }
 
 void MidiClockOut::forceUpdateLeaderBeatDistance(double beatDistance) {
     qDebug() << "MidiClockOut::forceUpdateLeaderBeatDistance()";
-    tickCount = tickCount - (tickCount % 24) + (beatDistance * 24); //TODO: Or jump?
+    tickCount = tickCount - (tickCount % 24) + (beatDistance * 24); //TODO(Tuuli): Or jump?
 }
 
 //SyncControl::slotRateChanged() (Syncable leader's synccontrol) calls m_pEngineSync->notifyRateChanged(this, bpm / m_leaderBpmAdjustFactor);
 //EngineSync::notifyRateChanged calls EngineSync::updateLeaderBpm(pSyncable source, bpm);
-// TODO: should MidiClockOut be one of EngineSync::m_syncables? Probably not; syncables is used to choose sync leaders
+// TODO(Tuuli): should MidiClockOut be one of EngineSync::m_syncables? Probably not; syncables is used to choose sync leaders
 void MidiClockOut::updateLeaderBpm(mixxx::Bpm bpm) {
     
     // dont follow ultra fast or slow BPMs
@@ -334,7 +341,7 @@ void MidiClockOut::updateLeaderBpm(mixxx::Bpm bpm) {
     //Spitballing how to get more accuracy when mid-tick tempo change happens.
     
     differenceTickLength = newTickLength - currentTickLength;
-    //m_tempoUpdateError = m_differenceTickLength; // TODO: scaled by the position; but probably not achievable?
+    //m_tempoUpdateError = m_differenceTickLength; // TODO(Tuuli): scaled by the position; but probably not achievable?
 
     newNextTickTime = plannedNextTickTime + differenceTickLength;
     
@@ -356,7 +363,7 @@ void MidiClockOut::updateLeaderBpm(mixxx::Bpm bpm) {
     */
 }
 
-// TODO: What is this for? Is this function called when a new leader is set?
+// TODO(Tuuli): What is this for? Is this function called when a new leader is set?
 // This corrects double/half tempo beat rates and resets the rate to the true rate when the Syncable becomes the leader
 void MidiClockOut::notifyLeaderParamSource() {
 }
@@ -434,17 +441,17 @@ void MidiClockOut::debugBarTime() {
 
 void MidiClockOut::tick() {
     //qDebug() << "MidiClockOut::tick():";
-    // TODO: send 0xF8!
+    // TODO(Tuuli): send 0xF8!
     debugTickCounter++;
 
     if (tickError > 1) {
-        // TODO: Do something to catchup with the timer for each tick until its fixed; shorter timers so the 0xF8s
+        // TODO(Tuuli): Do something to catchup with the timer for each tick until its fixed; shorter timers so the 0xF8s
         // are still sent, but quicker for a few pulses until caught up
         // Or... just send them all at once and let the serial buffer / MIDI buffer handle it? Brrrrrrrrrrr
     } else if (tickError < 0) {
         qDebug() << "MidiClockOut::tick():SKIP";
         skipNextTick = true;
-        // TODO: Check on positives/ negatives... so that the error pushes the sync in the right direction
+        // TODO(Tuuli): Check on positives/ negatives... so that the error pushes the sync in the right direction
     }
     if (!newBpm.compareEq(currentBpm) && newBpm.isReasonable()) {
         qDebug() << "MidiClockOut::tick():newbpm";
