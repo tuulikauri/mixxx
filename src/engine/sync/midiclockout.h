@@ -1,5 +1,6 @@
 #pragma once
 #include <ableton/platforms/stl/Clock.hpp>
+
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0) 
 #include <QChronoTimer> 
 using QChronoTimerType = QChronoTimer; 
@@ -8,9 +9,8 @@ using timerDurationType = std::chrono::nanoseconds;
 #include <QTimer> 
 using QChronoTimerType = QTimer; 
 using timerDurationType = std::chrono::milliseconds;
-
 #endif
-#include <QChronoTimer>
+
 #include "control/controlpushbutton.h"
 #include "engine/channels/enginechannel.h"
 #include "engine/enginebuffer.h"

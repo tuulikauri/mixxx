@@ -39,6 +39,7 @@
 //#include <QChronoTimer>
 
 #include "control/controlobject.h"
+#include "control/controlindicatortimer.h"
 #include "engine/sync/enginesync.h"
 #include "moc_midiclockout.cpp"
 #include "preferences/usersettings.h"
@@ -71,7 +72,7 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
           maximumNextTickCutoffTime(0),
           tickCutOff(ktickCutOff),
           ticknsTimerID(Qt::TimerId::Invalid),
-          debugTickCounter(0),
+          debugTickCounter(0),                   
           m_pMidiClockEnableButton(std::make_unique<ControlPushButton>(ConfigKey(group, "out_enabled"))),
           m_pMidiClockRestartButton(std::make_unique<ControlPushButton>(ConfigKey(group, "restart"))),
           m_pMidiClockTickButton(std::make_unique<ControlPushButton>(ConfigKey(group, "tick"))),
@@ -82,6 +83,7 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
           m_pMidiClockPosBars(std::make_unique<ControlObject>(ConfigKey(group, "num_bars"))) 
 {
     // Setup GUI
+    //ControlIndicatorTimer
     m_pMidiClockEnableButton->setButtonMode(mixxx::control::ButtonMode::Toggle);
     m_pMidiClockEnableButton->setStates(2);
     QObject::connect(m_pMidiClockEnableButton.get(), 
@@ -262,6 +264,7 @@ void MidiClockOut::notifyUniquePlaying() {
     // external synths can use their own clocks if nothing is playing on Mixxx.
     // Not all clock followers will support a SYSEX command to switch their clocks.
     // But its probably the best we can do...
+    qDebug() << "MidiClockOut::notifyUniquePlaying()";
 }
 
 /// Notify a Syncable that they should sync phase.
