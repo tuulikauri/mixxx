@@ -36,7 +36,13 @@
 #include <QtDebug>
 #include <cmath>
 
-//#include <QChronoTimer>
+#include <chrono>
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+#include <QChronoTimer>
+#else
+#include <QTimer>
+#endif
 
 #include "control/controlobject.h"
 #include "control/controlindicatortimer.h"
@@ -207,9 +213,15 @@ MidiClockOut::~MidiClockOut() {
 void MidiClockOut::slotControlOutEnabled(double controlButtonValue) {
     qDebug() << "MidiClockOut::slotControlOutEnabled():" << controlButtonValue;
     enabled = (controlButtonValue > 0);
-    if (enabled) {        
-        ticknsTimer.setInterval(std::chrono::duration_cast<timerDurationType>(
-            tickLengthFromBpm(currentBpm.value())));            
+    if (enabled) {     
+        #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+        ticknsTimer.setInterval(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                tickLengthFromBpm(currentBpm.value())));  
+        #else
+        ticknsTimer.setInterval(std::chrono::duration_cast<std::chrono::milliseconds>(
+                tickLengthFromBpm(currentBpm.value())));
+        #endif
+          
         ticknsTimer.start();        
         ticknsTimerID = ticknsTimer.id();
         m_pEngineSync->requestSyncMode(this, SyncMode::Follower);
@@ -466,7 +478,15 @@ void MidiClockOut::tick() {
         qDebug() << "MidiClockOut::tick():newbpm";
         currentBpm = newBpm;
         currentTickLength = tickLengthFromBpm(currentBpm.value());
-        ticknsTimer.setInterval(std::chrono::duration_cast<timerDurationType>(currentTickLength));
+
+        #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+        ticknsTimer.setInterval(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                currentTickLength));
+        #else
+        ticknsTimer.setInterval(std::chrono::duration_cast<std::chrono::milliseconds>(
+                currentTickLength));
+        #endif
+        
         ticknsTimer.start();        
         ticknsTimerID = ticknsTimer.id();    
         flag_bpmChangedThisBar = true;

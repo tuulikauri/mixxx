@@ -1,13 +1,15 @@
 #pragma once
 #include <ableton/platforms/stl/Clock.hpp>
 
+#include <chrono>
+
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0) 
 #include <QChronoTimer> 
-using QChronoTimerType = QChronoTimer; 
+//using QChronoTimerType = QChronoTimer; 
 using timerDurationType = std::chrono::nanoseconds;
 #else 
 #include <QTimer> 
-using QChronoTimerType = QTimer; 
+//using QChronoTimerType = QTimer; 
 using timerDurationType = std::chrono::milliseconds;
 #endif
 
@@ -97,11 +99,14 @@ class MidiClockOut : public QObject, public Syncable {
 
     void testMessage();
 
-    void tick();
+    
     void backSixteenth();
     void fwdSixteenth();
   
   private slots:    
+    void tick();
+    void debugTestAllTheTimers(double controlButtonValue);
+
     void slotControlOutEnabled(double controlButtonValue);
     void slotControlRestart(double controlButtonValue);
     void slotControlTick(double controlButtonValue);
@@ -111,7 +116,17 @@ class MidiClockOut : public QObject, public Syncable {
   private:
     // ableton::link::HostTimeFilter<MixxxClockRef> m_hostTimeFilter;
 
-    QChronoTimerType ticknsTimer = QChronoTimerType(nullptr);
+    //QChronoTimerType ticknsTimer = QChronoTimerType(nullptr);
+    //QChronoTimerType debugTimer = QChronoTimerType(nullptr);
+
+    #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)    
+    QChronoTimer ticknsTimer = QChronoTimer(nullptr);
+    QChronoTimer debugTimer = QChronoTimer(nullptr);   
+    #else
+    QTimer ticknsTimer = QTimer(nullptr);
+    QTimer debugTimer = QTimer(nullptr);
+    #endif
+
     Qt::TimerId ticknsTimerID;
 
     QString m_group;
@@ -184,4 +199,5 @@ class MidiClockOut : public QObject, public Syncable {
     uint32_t debugTickCounter;
 
     void debugBarTime();
+    
     };
