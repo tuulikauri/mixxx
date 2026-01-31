@@ -105,7 +105,7 @@ class MidiClockOut : public QObject, public Syncable {
   
   private slots:    
     void tick();
-    void debugTestAllTheTimers(double controlButtonValue);
+    //void debugTestAllTheTimers(double controlButtonValue);
 
     void slotControlOutEnabled(double controlButtonValue);
     void slotControlRestart(double controlButtonValue);
