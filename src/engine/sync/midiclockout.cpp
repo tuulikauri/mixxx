@@ -1,14 +1,29 @@
-// TODO(Tuuli): Mutexes, semaphors, thread protection
+// TODO(Tuuli): Mutexes, semaphors, thread protection? Any shared resources?
 
 // TODO(Tuuli): Audio playback / bpm is noticeably slower when mixxx isnt the focussed window; no difference with/without MCO enabled
 
-// TODO(Tuuli): Ticks are too slow, why? Timer? Could time 96 loops without other stuff happening...?
+// TODO(Tuuli): FIXED with timestamps and oneshot timers instead::: Ticks are too slow, why? Timer? Could time 96 loops without other stuff happening...?
     // Time 96 ticks and see what the result is
     // Time the beats from the beat_active or beat_distance controls, and see what the timed BPM is
 
-// TODO(Tuuli): midi out, 0xF8, and selecting a Midi device in a controller-mapping
+// TODO(Tuuli): midi out, 0xF8, and selecting a Midi device in a controller-mapping, controller thread
 
-// TODO(Tuuli): tests
+// TODO(Tuuli): Should portMidi device have a buffer and timestamps? It might help, for beatjumping ahead especially..
+
+// TODO(Tuuli): MidiClockOut should be controllable if its the only item playing.     
+    // The clock should keep playing at the previous tempo; 
+    // BUT... how to change tempo now? To drive external synths?
+    
+    // Could have a deck's tempo-fader mapped, and grab the last clock leaders
+    // fader to now control the MIDI Clock.
+     
+    // We could have a pre-programmed switch-over to internal clock (SYSEX)
+    // and midi.setTempo() to the current tempo as a fall-back, so that 
+    // external synths can use their own clocks if nothing is playing on Mixxx.
+    // Not all clock followers will support a SYSEX command to switch their clocks.
+    // But its probably the best we can do...
+
+// TODO(Tuuli): write tests
 
 // TODO(Tuuli): Not grabbing BPM when another playing syncable becomes leader - fixed now? Test, and remove redundant BPM-hoarding..
     //If not, find a way to get Bpm...
@@ -224,7 +239,8 @@ void MidiClockOut::slotControlOutEnabled(double controlButtonValue) {
                 tickLengthFromBpm(m_currentBpm.value())));
         #endif
           
-        m_ticknsTimer.start();        
+        m_ticknsTimer.start();    
+        sendMidiClockStart();
         m_ticknsTimerID = m_ticknsTimer.id();
         m_pEngineSync->requestSyncMode(this, SyncMode::Follower);
         m_pEngineSync->notifyPlayingAudible(this, true); //TODO(Tuuli): is this required to grab leaders tempo?        
@@ -233,6 +249,7 @@ void MidiClockOut::slotControlOutEnabled(double controlButtonValue) {
 
     } else {
         m_ticknsTimer.stop();
+        sendMidiClockStop();
         m_pEngineSync->requestSyncMode(this, SyncMode::None);
     }
 }
@@ -270,17 +287,6 @@ void MidiClockOut::setSyncMode(SyncMode syncMode) {
 
 /// Notify a Syncable that it is now the only currently-playing syncable.
 void MidiClockOut::notifyUniquePlaying() {
-    // The clock should keep playing at the previous tempo; 
-    // BUT... how to change tempo now? To drive external synths?
-    
-    // Could have a deck's tempo-fader mapped, and grab the last clock leaders
-    // fader to now control the MIDI Clock.
-     
-    // We could have a pre-programmed switch-over to internal clock (SYSEX)
-    // and midi.setTempo() to the current tempo as a fall-back, so that 
-    // external synths can use their own clocks if nothing is playing on Mixxx.
-    // Not all clock followers will support a SYSEX command to switch their clocks.
-    // But its probably the best we can do...
     qDebug() << "MidiClockOut::notifyUniquePlaying()";
 }
 
@@ -290,7 +296,7 @@ void MidiClockOut::requestSync() {
     EngineChannel* pLeaderChannel = m_pEngineSync->getLeaderChannel();
     m_beatDistance = pLeaderChannel->getEngineBuffer()->getExactPlayPos();
 
-    uint32_t newTickCount = m_tickCount - (m_tickCount % 24) + (m_beatDistance.value() * 24);
+    uint32_t newTickCount = m_tickCount - (m_tickCount % 24) + (m_beatDistance.value() * 24); // Replace the partial bar length, 24 ticks per bar
     m_tickError += newTickCount - m_tickCount;
     // TODO(Tuuli): incomplete handling of tickError
 
@@ -341,7 +347,8 @@ mixxx::Bpm MidiClockOut::getBaseBpm() const {
 
 void MidiClockOut::updateLeaderBeatDistance(double beatDistance) {    
     qDebug() << "MidiClockOut::updateLeaderBeatDistance()";
-    m_tickError = (m_tickCount % 24) + (beatDistance * 24); //TODO(Tuuli): do we want sequencers to keep playing in place, and catch up?    
+
+    m_tickError = (beatDistance * 24) - (m_tickCount % 24); // TODO(Tuuli): do we want sequencers to keep playing in place, and catch up?
 }
 
 void MidiClockOut::forceUpdateLeaderBeatDistance(double beatDistance) {
@@ -431,9 +438,10 @@ void MidiClockOut::restart() {
     qDebug() << "MidiClockOut::restart()";
     if (m_ticknsTimer.isActive()) {
         m_ticknsTimer.start();
+        sendMidiClockStart();
         m_ticknsTimerID = m_ticknsTimer.id();
     } else {
-        m_currentBpm = kStartBpm;
+        m_currentBpm = kStartBpm; // TODO(Tuuli): Why reset BPM on restart?
     }
     m_pEngineSync->notifyPlayingAudible(this, true);
 
@@ -462,21 +470,25 @@ void MidiClockOut::debugBarTime() {
         qDebug() << m_barLengthMeasured << "MidiClockOut::barLengthMeasured";
         qDebug() << m_currentTickLength * 96 << "MidiClockOut::barLengthTheory";
         qDebug() << "ERROR : " << m_barLengthError;
-        qDebug() << "TICKL : " << m_currentTickLength << ", " << (double) m_barLengthError.count() / m_currentTickLength.count();
-        qDebug() << "TICKS : " << m_debugTickCounter;
+        qDebug() << "TickLength : " << m_currentTickLength << ", Error as % of 1 TickLength: " << (double) m_barLengthError.count() / m_currentTickLength.count();
+        qDebug() << "TICKS in Bar : " << m_debugTickCounter;
         m_debugTickCounter = 0;
     }
     mflag_bpmChangedThisBar = false;
 }
 
-void MidiClockOut::sendMidiClockTick() {
-    //TODO(Tuuli): Connection to portmidiDevice, member variables to store connection, control thread..?
+void MidiClockOut::sendMidiClockTick() {    
     qDebug() << "MidiClockOut::sendMidiClockTick() (0xF8 to portMidi)";
+}
+void MidiClockOut::sendMidiClockStart() {
+    qDebug() << "MidiClockOut::sendMidiClockStart() (0xFA to portMidi)";
+}
+void MidiClockOut::sendMidiClockStop() {
+    qDebug() << "MidiClockOut::sendMidiClockStop() (0xFC to portMidi)";
 }
 
 void MidiClockOut::tick() {
     //qDebug() << "MidiClockOut::tick():";
-    // TODO(Tuuli): send 0xF8!
     m_debugTickCounter++;
 
     // Handle tick error correction
@@ -512,7 +524,7 @@ void MidiClockOut::tick() {
         mflag_bpmChangedThisBar = true;
     }
 
-    // Handle skipping or extra ticks
+    // Handle skipping (or TODO(Tuuli) extra ticks)
     if (m_skipNextTick) {
         qDebug() << "MidiClockOut::tick():skipNextTick";
         m_skipNextTick = false;
@@ -521,8 +533,6 @@ void MidiClockOut::tick() {
 
     // m_plannedNextTickTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch() + m_currentTickLength);
     m_maximumNextTickCutoffTime = m_plannedNextTickTime - m_tickCutOff;
-
-
 
     m_ticksSinceBpmChange++;
     m_plannedNextTickTime = m_timeReceivedNewLeaderBpm + m_currentTickLength * m_ticksSinceBpmChange; 
@@ -535,15 +545,22 @@ void MidiClockOut::tick() {
 
     // Handle late ticks
     if (m_intervalLength.count() > 0) {
-        m_ticknsTimer.setInterval(m_intervalLength);
+        #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+        m_ticknsTimer.setInterval(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                m_intervalLength));
+        #else
+        m_ticknsTimer.setInterval(std::chrono::duration_cast<std::chrono::milliseconds>(
+                m_intervalLength));
+        #endif        
         m_ticknsTimer.start(); // start a one-shot timer
+        m_ticknsTimerID = m_ticknsTimer.id();
     } else {
         tick(); // TODO(Tuuli): Does recursion work here? Any risk it doesnt converge? This should run up m_ticksSinceBpmChange until its > 0
     }
     
     sendMidiClockTick();
 
-    m_tickCount++;    
+    m_tickCount++;
 
     if ((m_tickCount % 6) == 0) {
         m_sixteenths++;

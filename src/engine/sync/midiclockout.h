@@ -181,6 +181,8 @@ class MidiClockOut : public QObject, public Syncable {
     void restart();
 
     void sendMidiClockTick(); ///< Sends 0xF8 to portMidi device
+    void sendMidiClockStart(); ///< Sends 0xFA to portMidi device
+    void sendMidiClockStop(); ///< Sends 0xFC to portMidi device
 
     //Control objects
     std::unique_ptr<ControlPushButton> m_pMidiClockEnableButton;
