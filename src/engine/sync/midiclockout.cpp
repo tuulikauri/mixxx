@@ -75,40 +75,40 @@ constexpr std::chrono::microseconds ktickCutOff{300};
 } // namespace
 
 MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
-        : m_group(group),
-          m_pEngineSync(pEngineSync),
-          m_syncMode(SyncMode::None),
-          m_oldTempo(kDefaultBpm),
-          m_absTimeWhenPrevOutputBufferReachesDac(0),
-          m_enabled(false),
-          m_tickCount(0),
-          m_tickError(0),
-          m_ticksSinceBpmChange(0),
-          m_sixteenths(1),
-          m_beats(1),
-          m_bars(1),
-          m_skipNextTick(false),
-          mflag_bpmChangedThisBar(false),
-          m_currentBpm(kStartBpm),
-          m_currentTickLength(kStartTickLength),
-          m_maximumNextTickCutoffTime(0),
-          m_tickCutOff(ktickCutOff),
-          m_ticknsTimerID(Qt::TimerId::Invalid),
-          m_debugTickCounter(0),    
-          // GUI objects
-          m_pMidiClockEnableButton(std::make_unique<ControlPushButton>(ConfigKey(group, "out_enabled"))),
-          m_pMidiClockRestartButton(std::make_unique<ControlPushButton>(ConfigKey(group, "restart"))),
-          m_pMidiClockTickButton(std::make_unique<ControlPushButton>(ConfigKey(group, "tick"))),
-          m_pMidiClockNudgeFwdButton(std::make_unique<ControlPushButton>(ConfigKey(group, "nudge_fwd"))),
-          m_pMidiClockNudgeBackButton(std::make_unique<ControlPushButton>(ConfigKey(group, "nudge_back"))),
-          m_pMidiClockPosSixteenths(std::make_unique<ControlObject>(ConfigKey(group, "num_sixteenths"))),
-          m_pMidiClockPosBeats(std::make_unique<ControlObject>(ConfigKey(group, "num_beats"))), 
-          m_pMidiClockPosBars(std::make_unique<ControlObject>(ConfigKey(group, "num_bars"))),
-          // Midi control objects to link to the JS script
-          m_pMidiClockTick(std::make_unique<ControlObject>(ConfigKey(group, "clock_tick"))),
-          m_pMidiClockStart(std::make_unique<ControlObject>(ConfigKey(group, "clock_start"))),
-          m_pMidiClockContinue(std::make_unique<ControlObject>(ConfigKey(group, "clock_continue"))),
-          m_pMidiClockStop(std::make_unique<ControlObject>(ConfigKey(group, "clock_stop")))
+            : m_group(group),
+              m_pEngineSync(pEngineSync),
+              m_syncMode(SyncMode::None),
+              m_oldTempo(kDefaultBpm),
+              m_absTimeWhenPrevOutputBufferReachesDac(0),
+              m_enabled(false),
+              m_tickCount(0),
+              m_tickError(0),
+              m_ticksSinceBpmChange(0),
+              m_sixteenths(1),
+              m_beats(1),
+              m_bars(1),
+              m_skipNextTick(false),
+              mflag_bpmChangedThisBar(false),
+              m_currentBpm(kStartBpm),
+              m_currentTickLength(kStartTickLength),
+              m_maximumNextTickCutoffTime(0),
+              m_tickCutOff(ktickCutOff),
+              m_ticknsTimerID(Qt::TimerId::Invalid),
+              m_debugTickCounter(0),    
+              // GUI objects
+              m_pMidiClockEnableButton(std::make_unique<ControlPushButton>(ConfigKey(group, "out_enabled"))),
+              m_pMidiClockRestartButton(std::make_unique<ControlPushButton>(ConfigKey(group, "restart"))),
+              m_pMidiClockTickButton(std::make_unique<ControlPushButton>(ConfigKey(group, "tick"))),
+              m_pMidiClockNudgeFwdButton(std::make_unique<ControlPushButton>(ConfigKey(group, "nudge_fwd"))),
+              m_pMidiClockNudgeBackButton(std::make_unique<ControlPushButton>(ConfigKey(group, "nudge_back"))),
+              m_pMidiClockPosSixteenths(std::make_unique<ControlObject>(ConfigKey(group, "num_sixteenths"))),
+              m_pMidiClockPosBeats(std::make_unique<ControlObject>(ConfigKey(group, "num_beats"))), 
+              m_pMidiClockPosBars(std::make_unique<ControlObject>(ConfigKey(group, "num_bars"))),
+              // Midi control objects to link to the JS script
+              m_pMidiClockTick(std::make_unique<ControlObject>(ConfigKey(group, "clock_tick"))),
+              m_pMidiClockStart(std::make_unique<ControlObject>(ConfigKey(group, "clock_start"))),
+              m_pMidiClockContinue(std::make_unique<ControlObject>(ConfigKey(group, "clock_continue"))),
+              m_pMidiClockStop(std::make_unique<ControlObject>(ConfigKey(group, "clock_stop")))
 {
     // Setup GUI
     //ControlIndicatorTimer
@@ -229,6 +229,11 @@ MidiClockOut::~MidiClockOut() {
     m_pMidiClockPosSixteenths.reset();
     m_pMidiClockPosBeats.reset();
     m_pMidiClockPosBars.reset();
+
+    m_pMidiClockTick.reset();
+    m_pMidiClockStart.reset();
+    m_pMidiClockContinue.reset();
+    m_pMidiClockStop.reset();
 }
 
 // GUI Controls
