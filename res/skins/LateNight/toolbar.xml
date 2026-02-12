@@ -206,13 +206,15 @@
             </Connection>
           </Number>
 
+          <Size>10min,1min</Size>
+
           <Template src="skin:/controls/button_1state.xml">
             <SetVariable name="TooltipId">midiclock_enabled</SetVariable>
             <SetVariable name="ObjectName">GuiToggleButton</SetVariable>
             <SetVariable name="Size">35f,20f</SetVariable>
             <SetVariable name="state_0_text">Tick</SetVariable>
             <SetVariable name="ConfigKey">[MidiClockOut],tick</SetVariable>
-          </Template>
+          </Template>                  
           
           <Label>
             <ObjectName>MidiClockLabel</ObjectName>
