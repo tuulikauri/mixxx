@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<MixxxMIDIPreset mixxxVersion="2.0.0+" schemaVersion="1">
+  <info>
+    <name>MIDI Clock Out</name>
+    <author>Tuuli</author>
+    <description>MIDI-Clock-output for MIDI Sync and Clock Out</description>
+    <forums>https://mixxx.discourse.group/</forums>
+    <wiki>http://mixxx.org/wiki/doku.php/</wiki>
+  </info>
+  <settings>
+    <group label="General">
+      <row orientation="vertical">
+        <option
+            variable="reset_behaviour"
+            type="integer"
+            min="1"
+            max="2"
+            default="1"
+            label="MIDI Reset Behaviour">
+          <description>
+            1 = Stop and Start; 2 = Start only
+          </description>
+        </option>
+      </row>
+    </group>  
+  </settings>
+  <controller id="midi_clock_out Control">
+    <scriptfiles>
+      <!--<file filename="lodash.mixxx.js"/>
+      <file filename="midi-components-0.0.js"/> Components framework-->
+      <file filename="Midi_clock_out-scripts.js" functionprefix="midi_clock_out"/>
+    </scriptfiles>
+
+    <controls>
+    </controls>
+
+    <outputs>
+    </outputs>
+  </controller>
+</MixxxMIDIPreset>

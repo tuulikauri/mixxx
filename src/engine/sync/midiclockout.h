@@ -20,6 +20,8 @@ using timerDurationType = std::chrono::milliseconds;
 #include "engine/sync/synccontrol.h"
 
 /// This class manages a Midi clock output (0xF8)
+/// Object is initialized in EngineSync constructor
+/// @sa EngineSync.h
 
 //or std::chrono::microseconds?
 //using MixxxClockRef = std::chrono::steady_clock; 
@@ -102,6 +104,14 @@ class MidiClockOut : public QObject, public Syncable {
     
     void backSixteenth();
     void fwdSixteenth();
+
+
+  signals:
+    void clockTick(double value, QObject* pSender);
+    void clockStart(double value, QObject* pSender);
+    void clockContinue(double value, QObject* pSender);
+    void clockStop(double value, QObject* pSender);
+
   
   private slots:    
     void tick();
@@ -182,6 +192,7 @@ class MidiClockOut : public QObject, public Syncable {
 
     void sendMidiClockTick(); ///< Sends 0xF8 to portMidi device
     void sendMidiClockStart(); ///< Sends 0xFA to portMidi device
+    void sendMidiClockContinue(); ///< Sends 0xFB to portMidi device
     void sendMidiClockStop(); ///< Sends 0xFC to portMidi device
 
     //Control objects
@@ -193,6 +204,11 @@ class MidiClockOut : public QObject, public Syncable {
     std::unique_ptr<ControlObject> m_pMidiClockPosSixteenths;
     std::unique_ptr<ControlObject> m_pMidiClockPosBeats;
     std::unique_ptr<ControlObject> m_pMidiClockPosBars;
+
+    std::unique_ptr<ControlObject> m_pMidiClockTick;
+    std::unique_ptr<ControlObject> m_pMidiClockStart;
+    std::unique_ptr<ControlObject> m_pMidiClockContinue;
+    std::unique_ptr<ControlObject> m_pMidiClockStop;
 
     std::chrono::microseconds getHostTime() const;
     std::chrono::microseconds getHostTimeAtSpeaker(std::chrono::microseconds hostTime) const;

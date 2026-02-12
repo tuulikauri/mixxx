@@ -94,7 +94,8 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
           m_maximumNextTickCutoffTime(0),
           m_tickCutOff(ktickCutOff),
           m_ticknsTimerID(Qt::TimerId::Invalid),
-          m_debugTickCounter(0),                   
+          m_debugTickCounter(0),    
+          // GUI objects
           m_pMidiClockEnableButton(std::make_unique<ControlPushButton>(ConfigKey(group, "out_enabled"))),
           m_pMidiClockRestartButton(std::make_unique<ControlPushButton>(ConfigKey(group, "restart"))),
           m_pMidiClockTickButton(std::make_unique<ControlPushButton>(ConfigKey(group, "tick"))),
@@ -102,16 +103,21 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
           m_pMidiClockNudgeBackButton(std::make_unique<ControlPushButton>(ConfigKey(group, "nudge_back"))),
           m_pMidiClockPosSixteenths(std::make_unique<ControlObject>(ConfigKey(group, "num_sixteenths"))),
           m_pMidiClockPosBeats(std::make_unique<ControlObject>(ConfigKey(group, "num_beats"))), 
-          m_pMidiClockPosBars(std::make_unique<ControlObject>(ConfigKey(group, "num_bars"))) 
+          m_pMidiClockPosBars(std::make_unique<ControlObject>(ConfigKey(group, "num_bars"))),
+          // Midi control objects to link to the JS script
+          m_pMidiClockTick(std::make_unique<ControlObject>(ConfigKey(group, "clock_tick"))),
+          m_pMidiClockStart(std::make_unique<ControlObject>(ConfigKey(group, "clock_start"))),
+          m_pMidiClockContinue(std::make_unique<ControlObject>(ConfigKey(group, "clock_continue"))),
+          m_pMidiClockStop(std::make_unique<ControlObject>(ConfigKey(group, "clock_stop")))
 {
     // Setup GUI
     //ControlIndicatorTimer
     m_pMidiClockEnableButton->setButtonMode(mixxx::control::ButtonMode::Toggle);
     m_pMidiClockEnableButton->setStates(2);
     QObject::connect(m_pMidiClockEnableButton.get(), 
-        &ControlObject::valueChanged, 
-        this, 
-        &MidiClockOut::slotControlOutEnabled);
+            &ControlObject::valueChanged, 
+            this, 
+            &MidiClockOut::slotControlOutEnabled);
 
     m_pMidiClockRestartButton->setButtonMode(mixxx::control::ButtonMode::Trigger);
     m_pMidiClockRestartButton->setStates(1);
@@ -123,23 +129,23 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
     m_pMidiClockTickButton->setButtonMode(mixxx::control::ButtonMode::Trigger);
     m_pMidiClockTickButton->setStates(1);
     QObject::connect(m_pMidiClockTickButton.get(),
-        &ControlObject::valueChanged,
-        this,
-        &MidiClockOut::slotControlTick);
+            &ControlObject::valueChanged,
+            this,
+            &MidiClockOut::slotControlTick);
 
     m_pMidiClockNudgeFwdButton->setButtonMode(mixxx::control::ButtonMode::Trigger);
     m_pMidiClockNudgeFwdButton->setStates(1);
     QObject::connect(m_pMidiClockNudgeFwdButton.get(),
-        &ControlObject::valueChanged,
-        this,
-        &MidiClockOut::slotControlNudgeFwd);
+            &ControlObject::valueChanged,
+            this,
+            &MidiClockOut::slotControlNudgeFwd);
 
     m_pMidiClockNudgeBackButton->setButtonMode(mixxx::control::ButtonMode::Trigger);
     m_pMidiClockNudgeBackButton->setStates(1);
     QObject::connect(m_pMidiClockNudgeBackButton.get(),
-        &ControlObject::valueChanged,
-        this,
-        &MidiClockOut::slotControlNudgeBack);
+            &ControlObject::valueChanged,
+            this,
+            &MidiClockOut::slotControlNudgeBack);
 
     m_pMidiClockPosSixteenths->setReadOnly();
     m_pMidiClockPosSixteenths->forceSet(m_sixteenths);
@@ -257,6 +263,8 @@ void MidiClockOut::slotControlOutEnabled(double controlButtonValue) {
 void MidiClockOut::slotControlRestart(double controlButtonValue) {
     Q_UNUSED(controlButtonValue)
     qDebug() << "MidiClockOut::slotControlRestart()";
+    sendMidiClockStop();
+    sendMidiClockStart();
     restart();
 }
 
@@ -478,12 +486,25 @@ void MidiClockOut::debugBarTime() {
 }
 
 void MidiClockOut::sendMidiClockTick() {    
+    emit clockTick(0, NULL);
+    // CoreServices.getControllerManager.controller[i].getMappingScriptFiles.identifier == "midi_clock_out"
+    // controller.send(0xF8...)
+    m_pMidiClockTick->setParameterFrom(m_tickCount % 16, this);
     qDebug() << "MidiClockOut::sendMidiClockTick() (0xF8 to portMidi)";
 }
 void MidiClockOut::sendMidiClockStart() {
+    emit clockStart(0, NULL);
+    m_pMidiClockStart->setParameterFrom(m_tickCount % 16, this);
     qDebug() << "MidiClockOut::sendMidiClockStart() (0xFA to portMidi)";
 }
+void MidiClockOut::sendMidiClockContinue() {
+    emit clockContinue(0, NULL);
+    m_pMidiClockContinue->setParameterFrom(m_tickCount % 16, this);
+    qDebug() << "MidiClockOut::sendMidiClockContinue() (0xFB to portMidi)";
+}
 void MidiClockOut::sendMidiClockStop() {
+    emit clockStop(0, NULL);
+    m_pMidiClockStop->setParameterFrom(m_tickCount % 16, this);
     qDebug() << "MidiClockOut::sendMidiClockStop() (0xFC to portMidi)";
 }
 
