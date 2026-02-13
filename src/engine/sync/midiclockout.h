@@ -1,16 +1,18 @@
 #pragma once
 #include <ableton/platforms/stl/Clock.hpp>
+
+#include <chrono>
+
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0) 
 #include <QChronoTimer> 
-using QChronoTimerType = QChronoTimer; 
+//using QChronoTimerType = QChronoTimer; 
 using timerDurationType = std::chrono::nanoseconds;
 #else 
 #include <QTimer> 
-using QChronoTimerType = QTimer; 
+//using QChronoTimerType = QTimer; 
 using timerDurationType = std::chrono::milliseconds;
-
 #endif
-#include <QChronoTimer>
+
 #include "control/controlpushbutton.h"
 #include "engine/channels/enginechannel.h"
 #include "engine/enginebuffer.h"
@@ -18,6 +20,8 @@ using timerDurationType = std::chrono::milliseconds;
 #include "engine/sync/synccontrol.h"
 
 /// This class manages a Midi clock output (0xF8)
+/// Object is initialized in EngineSync constructor
+/// @sa EngineSync.h
 
 //or std::chrono::microseconds?
 //using MixxxClockRef = std::chrono::steady_clock; 
@@ -73,7 +77,7 @@ class MidiClockOut : public QObject, public Syncable {
     /// SyncableListener::notifyBeatDistanceChanged or signal loops could occur.
     void updateLeaderBeatDistance(double beatDistance) override;
 
-    /// Enforces the immediate change of the beat distance of all Link peers
+    /// Enforces the immediate change of the beat distance
     void forceUpdateLeaderBeatDistance(double beatDistance);
 
     /// Must never result in a call to SyncableListener::notifyBpmChanged or
@@ -97,11 +101,22 @@ class MidiClockOut : public QObject, public Syncable {
 
     void testMessage();
 
-    void tick();
+    
     void backSixteenth();
     void fwdSixteenth();
+
+
+  signals:
+    void clockTick(double value, QObject* pSender);
+    void clockStart(double value, QObject* pSender);
+    void clockContinue(double value, QObject* pSender);
+    void clockStop(double value, QObject* pSender);
+
   
   private slots:    
+    void tick();
+    //void debugTestAllTheTimers(double controlButtonValue);
+
     void slotControlOutEnabled(double controlButtonValue);
     void slotControlRestart(double controlButtonValue);
     void slotControlTick(double controlButtonValue);
@@ -111,55 +126,81 @@ class MidiClockOut : public QObject, public Syncable {
   private:
     // ableton::link::HostTimeFilter<MixxxClockRef> m_hostTimeFilter;
 
-    QChronoTimerType ticknsTimer = QChronoTimerType(nullptr);
-    Qt::TimerId ticknsTimerID;
-
     QString m_group;
     EngineSync* m_pEngineSync; // unowned, must outlive this.
     SyncMode m_syncMode;
 
     mixxx::Bpm m_oldTempo;
-    mixxx::Bpm currentBpm;
-    mixxx::Bpm newBpm;
-    double dnewBpm;
+    mixxx::Bpm m_currentBpm;
+    mixxx::Bpm m_newBpm;
+    //double m_dnewBpm;
 
 
     std::chrono::microseconds m_absTimeWhenPrevOutputBufferReachesDac;
-    std::chrono::microseconds nextTickTime;
-    std::chrono::microseconds plannedNextTickTime;    
-    std::chrono::microseconds newNextTickTime;
-    std::chrono::microseconds differenceTickLength;
+    std::chrono::microseconds m_nextTickTime; //?
+    std::chrono::microseconds m_plannedNextTickTime; //?
+    std::chrono::microseconds m_newNextTickTime; //?
+    std::chrono::microseconds m_differenceTickLength; //?
 
-    std::chrono::microseconds timeReceivedNewLeaderBpmLate;    
-    std::chrono::microseconds maximumNextTickCutoffTime;
+    std::chrono::microseconds m_timeReceivedNewLeaderBpm; ///< For calculating next timestamp with the new interval    
+    std::chrono::microseconds m_timeReceivedNewLeaderBpmLate; //?    
+    std::chrono::microseconds m_maximumNextTickCutoffTime; //?
     
 
     std::chrono::microseconds tickLengthFromBpm(double bpm);
-    std::chrono::microseconds currentTickLength;
-    std::chrono::microseconds newTickLength;
-    std::chrono::microseconds tickCutOff;    
+    std::chrono::microseconds m_currentTickLength;
+    std::chrono::microseconds m_newTickLength;
+    std::chrono::microseconds m_tickCutOff;    
+    std::chrono::nanoseconds m_intervalLength;
 
-    mixxx::audio::FramePos beatDistance;
+    mixxx::audio::FramePos m_beatDistance; //?
 
-    bool flag_plannedTickWillBeLate;
-    bool flag_useNewInsteadOfPlannedTickTime;
-    bool flag_bpmChangedThisBar;
-
-    bool enabled;   
+    bool m_enabled;   
 
     /// 24PPQN ticks     
-    uint32_t tickCount;
-    uint8_t sixteenths;
-    uint8_t beats;
-    uint32_t bars;
-    int32_t tickError;
+    uint32_t m_tickCount;
+    uint8_t m_sixteenths;
+    uint8_t m_beats;
+    uint32_t m_bars;
 
-    bool skipNextTick;    
+    bool mflag_plannedTickWillBeLate; //?
+    bool mflag_useNewInsteadOfPlannedTickTime; //?
+    bool mflag_bpmChangedThisBar;
+
+    int32_t m_tickError;
+    uint32_t m_ticksSinceBpmChange; ///< Counter to use with m_timeReceivedNewLeaderBpm to calculate timepoints
+
+    bool m_skipNextTick;    
+
+        // QChronoTimerType m_ticknsTimer = QChronoTimerType(nullptr);
+    // QChronoTimerType m_debugTimer = QChronoTimerType(nullptr);
+
+    #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+    QChronoTimer m_ticknsTimer = QChronoTimer(nullptr);
+    QChronoTimer m_debugTimer = QChronoTimer(nullptr);
+    #else
+    QTimer m_ticknsTimer = QTimer(nullptr);
+    QTimer m_debugTimer = QTimer(nullptr);
+    #endif
+
+    Qt::TimerId m_ticknsTimerID;
 
     void skipTick();
 
     //Restart all tick counters, all bpm adjusters, and the tick clock (if its running)
     void restart();
+
+    void sendMidiClockTick(); ///< Sends 0xF8 to portMidi device
+    void sendMidiClockStart(); ///< Sends 0xFA to portMidi device
+    void sendMidiClockContinue(); ///< Sends 0xFB to portMidi device
+    void sendMidiClockStop(); ///< Sends 0xFC to portMidi device
+
+    //Debug 
+    std::chrono::microseconds m_barLengthMeasured;
+    std::chrono::microseconds m_barLengthError;
+    std::chrono::steady_clock::time_point m_startTime;
+    std::chrono::steady_clock::time_point m_endTime;
+    uint32_t m_debugTickCounter;
 
     //Control objects
     std::unique_ptr<ControlPushButton> m_pMidiClockEnableButton;
@@ -171,17 +212,13 @@ class MidiClockOut : public QObject, public Syncable {
     std::unique_ptr<ControlObject> m_pMidiClockPosBeats;
     std::unique_ptr<ControlObject> m_pMidiClockPosBars;
 
+    std::unique_ptr<ControlObject> m_pMidiClockTick;
+    std::unique_ptr<ControlObject> m_pMidiClockStart;
+    std::unique_ptr<ControlObject> m_pMidiClockContinue;
+    std::unique_ptr<ControlObject> m_pMidiClockStop;
+
     std::chrono::microseconds getHostTime() const;
     std::chrono::microseconds getHostTimeAtSpeaker(std::chrono::microseconds hostTime) const;
-
-    // Test/Debug code
-
-    std::chrono::microseconds barLengthMeasured;
-    std::chrono::microseconds barLengthError;
-    std::chrono::steady_clock::time_point startTime;
-    std::chrono::steady_clock::time_point endTime;
-
-    uint32_t debugTickCounter;
-
     void debugBarTime();
+    
     };
