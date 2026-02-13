@@ -79,21 +79,25 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
               m_pEngineSync(pEngineSync),
               m_syncMode(SyncMode::None),
               m_oldTempo(kDefaultBpm),
+              m_currentBpm(kStartBpm),          
+              m_newBpm(kStartBpm),                               
               m_absTimeWhenPrevOutputBufferReachesDac(0),
+              m_maximumNextTickCutoffTime(0),
+              m_currentTickLength(kStartTickLength),
+              m_tickCutOff(ktickCutOff),
+
               m_enabled(false),
               m_tickCount(0),
-              m_tickError(0),
-              m_ticksSinceBpmChange(0),
               m_sixteenths(1),
               m_beats(1),
-              m_bars(1),
-              m_skipNextTick(false),
+              m_bars(1),       
+
               mflag_bpmChangedThisBar(false),
-              m_currentBpm(kStartBpm),
-              m_currentTickLength(kStartTickLength),
-              m_maximumNextTickCutoffTime(0),
-              m_tickCutOff(ktickCutOff),
-              m_ticknsTimerID(Qt::TimerId::Invalid),
+              m_tickError(0),
+              m_ticksSinceBpmChange(0),              
+              m_skipNextTick(false),
+                                                                                
+              m_ticknsTimerID(Qt::TimerId::Invalid),                       
               m_debugTickCounter(0),    
               // GUI objects
               m_pMidiClockEnableButton(std::make_unique<ControlPushButton>(ConfigKey(group, "out_enabled"))),
@@ -309,7 +313,7 @@ void MidiClockOut::requestSync() {
     EngineChannel* pLeaderChannel = m_pEngineSync->getLeaderChannel();
     m_beatDistance = pLeaderChannel->getEngineBuffer()->getExactPlayPos();
 
-    uint32_t newTickCount = m_tickCount - (m_tickCount % 24) + (m_beatDistance.value() * 24); // Replace the partial bar length, 24 ticks per bar
+    uint32_t newTickCount = m_tickCount - (m_tickCount % 24) + (uint32_t)(m_beatDistance.value() * 24); // Replace the partial bar length, 24 ticks per bar
     m_tickError += newTickCount - m_tickCount;
     // TODO(Tuuli): incomplete handling of tickError
 
@@ -361,12 +365,12 @@ mixxx::Bpm MidiClockOut::getBaseBpm() const {
 void MidiClockOut::updateLeaderBeatDistance(double beatDistance) {    
     qDebug() << "MidiClockOut::updateLeaderBeatDistance()";
 
-    m_tickError = (beatDistance * 24) - (m_tickCount % 24); // TODO(Tuuli): do we want sequencers to keep playing in place, and catch up?
+    m_tickError = (uint32_t)(beatDistance * 24) - (m_tickCount % 24); // TODO(Tuuli): do we want sequencers to keep playing in place, and catch up?
 }
 
 void MidiClockOut::forceUpdateLeaderBeatDistance(double beatDistance) {
     qDebug() << "MidiClockOut::forceUpdateLeaderBeatDistance()";
-    m_tickCount = m_tickCount - (m_tickCount % 24) + (beatDistance * 24); //TODO(Tuuli): Or jump?
+    m_tickCount = m_tickCount - (m_tickCount % 24) + (uint32_t)(beatDistance * 24); //TODO(Tuuli): Or jump?
 }
 
 //SyncControl::slotRateChanged() (Syncable leader's synccontrol) calls m_pEngineSync->notifyRateChanged(this, bpm / m_leaderBpmAdjustFactor);
@@ -483,7 +487,7 @@ void MidiClockOut::debugBarTime() {
         qDebug() << m_barLengthMeasured << "MidiClockOut::barLengthMeasured";
         qDebug() << m_currentTickLength * 96 << "MidiClockOut::barLengthTheory";
         qDebug() << "ERROR : " << m_barLengthError;
-        qDebug() << "TickLength : " << m_currentTickLength << ", Error as % of 1 TickLength: " << (double) m_barLengthError.count() / m_currentTickLength.count();
+        qDebug() << "TickLength : " << m_currentTickLength << ", Error as % of 1 TickLength: " << (double) (m_barLengthError.count() / m_currentTickLength.count());
         qDebug() << "TICKS in Bar : " << m_debugTickCounter;
         m_debugTickCounter = 0;
     }
@@ -491,7 +495,7 @@ void MidiClockOut::debugBarTime() {
 }
 
 void MidiClockOut::sendMidiClockTick() {    
-    emit clockTick(0, NULL);
+    // emit clockTick(0, NULL);
     // CoreServices.getControllerManager.controller[i].getMappingScriptFiles.identifier == "midi_clock_out"
     // controller.send(0xF8...)
     m_pMidiClockTick->setParameterFrom(m_tickCount % 16, this);
@@ -655,6 +659,7 @@ std::chrono::microseconds MidiClockOut::getHostTime() const {
 }
 
 std::chrono::microseconds MidiClockOut::getHostTimeAtSpeaker(std::chrono::microseconds hostTime) const {
+    Q_UNUSED(hostTime)
     std::chrono::microseconds time = 
         std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch());
     return time;

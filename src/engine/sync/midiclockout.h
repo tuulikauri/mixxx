@@ -126,19 +126,6 @@ class MidiClockOut : public QObject, public Syncable {
   private:
     // ableton::link::HostTimeFilter<MixxxClockRef> m_hostTimeFilter;
 
-    //QChronoTimerType m_ticknsTimer = QChronoTimerType(nullptr);
-    //QChronoTimerType m_debugTimer = QChronoTimerType(nullptr);
-
-    #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)    
-    QChronoTimer m_ticknsTimer = QChronoTimer(nullptr);
-    QChronoTimer m_debugTimer = QChronoTimer(nullptr);   
-    #else
-    QTimer m_ticknsTimer = QTimer(nullptr);
-    QTimer m_debugTimer = QTimer(nullptr);
-    #endif
-
-    Qt::TimerId m_ticknsTimerID;
-
     QString m_group;
     EngineSync* m_pEngineSync; // unowned, must outlive this.
     SyncMode m_syncMode;
@@ -146,18 +133,18 @@ class MidiClockOut : public QObject, public Syncable {
     mixxx::Bpm m_oldTempo;
     mixxx::Bpm m_currentBpm;
     mixxx::Bpm m_newBpm;
-    double m_dnewBpm;
+    //double m_dnewBpm;
 
 
     std::chrono::microseconds m_absTimeWhenPrevOutputBufferReachesDac;
-    std::chrono::microseconds m_nextTickTime;
-    std::chrono::microseconds m_plannedNextTickTime;    
-    std::chrono::microseconds m_newNextTickTime;
-    std::chrono::microseconds m_differenceTickLength;
+    std::chrono::microseconds m_nextTickTime; //?
+    std::chrono::microseconds m_plannedNextTickTime; //?
+    std::chrono::microseconds m_newNextTickTime; //?
+    std::chrono::microseconds m_differenceTickLength; //?
 
-    std::chrono::microseconds m_timeReceivedNewLeaderBpm;    
-    std::chrono::microseconds m_timeReceivedNewLeaderBpmLate;    
-    std::chrono::microseconds m_maximumNextTickCutoffTime;
+    std::chrono::microseconds m_timeReceivedNewLeaderBpm; ///< For calculating next timestamp with the new interval    
+    std::chrono::microseconds m_timeReceivedNewLeaderBpmLate; //?    
+    std::chrono::microseconds m_maximumNextTickCutoffTime; //?
     
 
     std::chrono::microseconds tickLengthFromBpm(double bpm);
@@ -166,11 +153,7 @@ class MidiClockOut : public QObject, public Syncable {
     std::chrono::microseconds m_tickCutOff;    
     std::chrono::nanoseconds m_intervalLength;
 
-    mixxx::audio::FramePos m_beatDistance;
-
-    bool mflag_plannedTickWillBeLate;
-    bool mflag_useNewInsteadOfPlannedTickTime;
-    bool mflag_bpmChangedThisBar;
+    mixxx::audio::FramePos m_beatDistance; //?
 
     bool m_enabled;   
 
@@ -180,10 +163,27 @@ class MidiClockOut : public QObject, public Syncable {
     uint8_t m_beats;
     uint32_t m_bars;
 
+    bool mflag_plannedTickWillBeLate; //?
+    bool mflag_useNewInsteadOfPlannedTickTime; //?
+    bool mflag_bpmChangedThisBar;
+
     int32_t m_tickError;
     uint32_t m_ticksSinceBpmChange; ///< Counter to use with m_timeReceivedNewLeaderBpm to calculate timepoints
 
     bool m_skipNextTick;    
+
+        // QChronoTimerType m_ticknsTimer = QChronoTimerType(nullptr);
+    // QChronoTimerType m_debugTimer = QChronoTimerType(nullptr);
+
+    #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+    QChronoTimer m_ticknsTimer = QChronoTimer(nullptr);
+    QChronoTimer m_debugTimer = QChronoTimer(nullptr);
+    #else
+    QTimer m_ticknsTimer = QTimer(nullptr);
+    QTimer m_debugTimer = QTimer(nullptr);
+    #endif
+
+    Qt::TimerId m_ticknsTimerID;
 
     void skipTick();
 
@@ -194,6 +194,13 @@ class MidiClockOut : public QObject, public Syncable {
     void sendMidiClockStart(); ///< Sends 0xFA to portMidi device
     void sendMidiClockContinue(); ///< Sends 0xFB to portMidi device
     void sendMidiClockStop(); ///< Sends 0xFC to portMidi device
+
+    //Debug 
+    std::chrono::microseconds m_barLengthMeasured;
+    std::chrono::microseconds m_barLengthError;
+    std::chrono::steady_clock::time_point m_startTime;
+    std::chrono::steady_clock::time_point m_endTime;
+    uint32_t m_debugTickCounter;
 
     //Control objects
     std::unique_ptr<ControlPushButton> m_pMidiClockEnableButton;
@@ -212,16 +219,6 @@ class MidiClockOut : public QObject, public Syncable {
 
     std::chrono::microseconds getHostTime() const;
     std::chrono::microseconds getHostTimeAtSpeaker(std::chrono::microseconds hostTime) const;
-
-    // Test/Debug code
-
-    std::chrono::microseconds m_barLengthMeasured;
-    std::chrono::microseconds m_barLengthError;
-    std::chrono::steady_clock::time_point m_startTime;
-    std::chrono::steady_clock::time_point m_endTime;
-
-    uint32_t m_debugTickCounter;
-
     void debugBarTime();
     
     };
