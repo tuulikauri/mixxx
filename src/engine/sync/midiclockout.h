@@ -153,7 +153,8 @@ class MidiClockOut : public QObject, public Syncable {
     std::chrono::microseconds m_tickCutOff;    
     std::chrono::nanoseconds m_intervalLength;
 
-    mixxx::audio::FramePos m_beatDistance; //?
+    mixxx::audio::FramePos m_newBeatDistance;
+    mixxx::audio::FramePos m_beatDistance; ///< The beat position of MidiClockOut clock
 
     bool m_enabled;   
 
@@ -165,9 +166,9 @@ class MidiClockOut : public QObject, public Syncable {
 
     bool mflag_plannedTickWillBeLate; //?
     bool mflag_useNewInsteadOfPlannedTickTime; //?
-    bool mflag_bpmChangedThisBar;
+    bool mflag_bpmChangedThisBar; ///< Used to report bar-length accuracy for steady-BPM bars
 
-    int32_t m_tickError;
+    int32_t m_tickSyncOffset; ///< Stores sync tick offsets; difference from the latest update of the leaders sync position to MidiClockOuts sync position. Positive numbers mean the MidiClockOut ticks are behind the SyncLeaders phase and need to catchup.
     uint32_t m_ticksSinceBpmChange; ///< Counter to use with m_timeReceivedNewLeaderBpm to calculate timepoints
 
     bool m_skipNextTick;    
@@ -185,7 +186,10 @@ class MidiClockOut : public QObject, public Syncable {
 
     Qt::TimerId m_ticknsTimerID;
 
+    void handleTickSyncOffset();
+    void handleNewBPM(); 
     void skipTick();
+
 
     //Restart all tick counters, all bpm adjusters, and the tick clock (if its running)
     void restart();

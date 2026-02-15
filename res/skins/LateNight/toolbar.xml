@@ -178,7 +178,7 @@
           <Number>
             <TooltipId>num_bars</TooltipId>
             <ObjectName>MidiClockBars</ObjectName>
-            <Size>30f,0min</Size>
+            <Size>35f,0min</Size>
             <NumberOfDigits>0</NumberOfDigits>
             <Alignment>right</Alignment>
             <Connection>
@@ -188,7 +188,7 @@
           <Number>
             <TooltipId>num_beats</TooltipId>
             <ObjectName>MidiClockBeats</ObjectName>
-            <Size>20f,0min</Size>
+            <Size>20f,26f</Size>
             <NumberOfDigits>0</NumberOfDigits>
             <Alignment>right</Alignment>
             <Connection>
@@ -198,7 +198,7 @@
           <Number>
             <TooltipId>num_sixteenths</TooltipId>
             <ObjectName>MidiClockSixteenths</ObjectName>
-            <Size>20f,0min</Size>
+            <Size>20f,26f</Size>
             <NumberOfDigits>0</NumberOfDigits>
             <Alignment>right</Alignment>
             <Connection>
@@ -206,8 +206,14 @@
             </Connection>
           </Number>
 
-          <Size>10min,1min</Size>
-
+          <Label>
+            <ObjectName>blank</ObjectName>
+            <TooltipId>blank</TooltipId>
+            <Size>10f,10f</Size>
+            <Alignment>center</Alignment>
+            <Text> </Text>
+          </Label>
+          
           <Template src="skin:/controls/button_1state.xml">
             <SetVariable name="TooltipId">midiclock_enabled</SetVariable>
             <SetVariable name="ObjectName">GuiToggleButton</SetVariable>

@@ -51,6 +51,7 @@
 #include <QtDebug>
 #include <cmath>
 
+//TODO(Tuuli): These libraries are included in the .h already, remove?
 #include <chrono>
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
@@ -93,7 +94,7 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
               m_bars(1),       
 
               mflag_bpmChangedThisBar(false),
-              m_tickError(0),
+              m_tickSyncOffset(0),
               m_ticksSinceBpmChange(0),              
               m_skipNextTick(false),
                                                                                 
@@ -308,26 +309,20 @@ void MidiClockOut::notifyUniquePlaying() {
 }
 
 /// Notify a Syncable that they should sync phase.
-void MidiClockOut::requestSync() {
-    // TODO(Tuuli): Is this the correct way to get the leaders phase? Syncable::getBaseBpm() and m_pEngineSync->pickNonSyncSyncTarget()
-    EngineChannel* pLeaderChannel = m_pEngineSync->getLeaderChannel();
-    m_beatDistance = pLeaderChannel->getEngineBuffer()->getExactPlayPos();
-
-    uint32_t newTickCount = m_tickCount - (m_tickCount % 24) + (uint32_t)(m_beatDistance.value() * 24); // Replace the partial bar length, 24 ticks per bar
-    m_tickError += newTickCount - m_tickCount;
-    // TODO(Tuuli): incomplete handling of tickError
-
-    // TODO(Tuuli): should sync tempo as well? Or do we assume this is already handled?
-    Syncable* target = m_pEngineSync->pickNonSyncSyncTarget(getChannel());
-    if (target == nullptr) {
-        return;
-    }
-    auto newSetBpm = target->getBpm();
-    if (newSetBpm.isReasonable()) {
-        m_newBpm = newSetBpm;
-    }    
-
-    qDebug() << "MidiClockOut::requestSync(), error (ticks):" << m_tickError;
+void MidiClockOut::requestSync() {    
+    // updateLeaderBeatDistance(double beatDistance) handles the sync position update.
+    // 
+    // SyncControl::requestSync() calls m_pChannel->getEngineBuffer()->requestSyncPhase(); only.
+    // This queues a phase seek, then handled in EngineBuffer::processSeek() function
+    // It reads the current m_playPos and shapes it through these checks...
+    // syncPosition = m_pBpmControl->getBeatMatchPosition(m_playPos, true, true);
+    // position = m_pLoopingControl->getSyncPositionInsideLoop(m_playPos, syncPosition);  
+    // It then calls EngineBuffer::setNewPlaypos(position) to set EngineBuffer::m_playPos if they arent equal
+    // 
+    // EngineSync::requestSyncMode() calls:
+    //   reinitLeaderParams(pParamsSyncable);
+    //   pSyncable->updateInstantaneousBpm(pParamsSyncable->getBpm());
+    //   if (pParamsSyncable != pSyncable && mode != SyncMode::None) pSyncable->requestSync();    
 }
 
 /// Must NEVER return a mode that was not set directly via
@@ -365,12 +360,31 @@ mixxx::Bpm MidiClockOut::getBaseBpm() const {
 void MidiClockOut::updateLeaderBeatDistance(double beatDistance) {    
     qDebug() << "MidiClockOut::updateLeaderBeatDistance()";
 
-    m_tickError = (uint32_t)(beatDistance * 24) - (m_tickCount % 24); // TODO(Tuuli): do we want sequencers to keep playing in place, and catch up?
+    m_tickSyncOffset = (int32_t)(beatDistance * 24) - ((int32_t)m_tickCount % 24); // TODO(Tuuli): do we want sequencers to keep playing in place, and catch up?
+    
+    // TODO(Tuuli): Is the double beatDistance the same as the frame position?
+    m_newBeatDistance.setValue(beatDistance);
+    handleTickSyncOffset();
+
+    /*
+    * Removed from requestSync(), here for reference
+    // TODO(Tuuli): Is this the correct way to get the leaders phase? Syncable::getBaseBpm() and m_pEngineSync->pickNonSyncSyncTarget() ...getEngineBuffer has a comment to remove it as its a hack. Replace with?
+    EngineChannel* pLeaderChannel = m_pEngineSync->getLeaderChannel();
+    m_newBeatDistance = pLeaderChannel->getEngineBuffer()->getExactPlayPos();
+
+    uint32_t newTickCount = m_tickCount - (m_tickCount % 24) + (uint32_t)(m_newBeatDistance.value() * 24); // Replace the partial bar length, 24 ticks per bar
+    m_tickSyncOffset = (int32_t)newTickCount - (int32_t)m_tickCount;
+    handleTickSyncOffset();
+
+    qDebug() << "MidiClockOut::requestSync(), error (ticks):" << m_tickSyncOffset;
+    */
+
 }
 
 void MidiClockOut::forceUpdateLeaderBeatDistance(double beatDistance) {
     qDebug() << "MidiClockOut::forceUpdateLeaderBeatDistance()";
-    m_tickCount = m_tickCount - (m_tickCount % 24) + (uint32_t)(beatDistance * 24); //TODO(Tuuli): Or jump?
+    updateLeaderBeatDistance(beatDistance);
+    //m_tickCount = m_tickCount - (m_tickCount % 24) + (int32_t)(beatDistance * 24); //TODO(Tuuli): Or jump the tickCount immediately?
 }
 
 //SyncControl::slotRateChanged() (Syncable leader's synccontrol) calls m_pEngineSync->notifyRateChanged(this, bpm / m_leaderBpmAdjustFactor);
@@ -383,10 +397,7 @@ void MidiClockOut::updateLeaderBpm(mixxx::Bpm bpm) {
         return;
     }
     m_newBpm = bpm;    
-    m_newTickLength = tickLengthFromBpm(m_newBpm.value());
-    m_timeReceivedNewLeaderBpm = std::chrono::duration_cast<std::chrono::microseconds>
-            (std::chrono::steady_clock::now().time_since_epoch());
-    m_ticksSinceBpmChange = 0;
+    handleNewBPM();
         
     qDebug() << "MidiClockOut::updateLeaderBpm()" << m_newBpm.value();
     
@@ -417,7 +428,7 @@ void MidiClockOut::updateLeaderBpm(mixxx::Bpm bpm) {
 }
 
 // TODO(Tuuli): What is this for? Is this function called when a new leader is set?
-// This corrects double/half tempo beat rates and resets the rate to the true rate when the Syncable becomes the leader
+// This resets double/half tempo beat rates and resets the rate to the true rate when the Syncable becomes the leader
 void MidiClockOut::notifyLeaderParamSource() {
 }
 
@@ -463,12 +474,13 @@ void MidiClockOut::restart() {
     m_pEngineSync->notifyPlayingAudible(this, true);
 
     m_tickCount = 0;
-    m_tickError = 0;
+    m_tickSyncOffset = 0;
     m_sixteenths = 1;
     m_beats = 1;     
     m_bars = 1;
     m_skipNextTick = false;
     mflag_bpmChangedThisBar = false;
+    handleTickSyncOffset();
 
     m_pMidiClockPosSixteenths->forceSet(m_sixteenths);
     m_pMidiClockPosBeats->forceSet(m_beats);
@@ -517,20 +529,48 @@ void MidiClockOut::sendMidiClockStop() {
     qDebug() << "MidiClockOut::sendMidiClockStop() (0xFC to portMidi)";
 }
 
-void MidiClockOut::tick() {
-    //qDebug() << "MidiClockOut::tick():";
-    m_debugTickCounter++;
+// TODO(Tuuli): incomplete handling of tickSyncOffset
+/// @brief Update in the [EngineSync] thread when a sync/beat_position update is available
+/// @param m_tickSyncOffset stores how many ticks behind or ahead the MidiClockOut is from the phase of the leader track's beat
+void MidiClockOut::handleTickSyncOffset() {    
+    // m_tickSyncOffset = (int32_t)(beatDistance * 24) - ((int32_t)m_tickCount % 24);
+    // m_newBeatDistance = pLeaderChannel->getEngineBuffer()->getExactPlayPos();
 
-    // Handle tick error correction
-    if (m_tickError > 1) {
+
+    // Handle tick sync correction
+    if (m_tickSyncOffset > 1) {
         // TODO(Tuuli): Do something to catchup with the timer for each tick until its fixed; shorter timers so the 0xF8s
         // are still sent, but quicker for a few pulses until caught up
         // Or... just send them all at once and let the serial buffer / MIDI buffer handle it? Brrrrrrrrrrr
-    } else if (m_tickError < 0) {
+        // DIN-Midi can send a tick every 320us.
+    } else if (m_tickSyncOffset < 0) {
         qDebug() << "MidiClockOut::tick():SKIP";
         m_skipNextTick = true;
         // TODO(Tuuli): Check on positives/ negatives... so that the error pushes the sync in the right direction
     }
+}
+
+/// @brief Update in the [EngineSync] thread when the BPM is available
+/// Called by: 
+/// updateLeaderBpm(mixxx::Bpm bpm); 
+///    also called from reinitLeaderParams updateInstantaneousBpm slotControlOutEnabled
+/// onCallbackStart(); 
+/// 
+/// Setup a BPM to use for the next tick, and accumulate error information to account for mid-tick BPM changes
+void MidiClockOut::handleNewBPM() {
+    
+    qDebug() << "MidiClockOut::tick():handleNewBPM";
+    if (!m_newBpm.compareEq(m_currentBpm) && m_newBpm.isReasonable()) {
+        m_newTickLength = tickLengthFromBpm(m_newBpm.value());
+        m_timeReceivedNewLeaderBpm = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch());
+        m_ticksSinceBpmChange = 0;
+    }
+}
+
+void MidiClockOut::tick() {
+    //qDebug() << "MidiClockOut::tick():";
+    m_debugTickCounter++;
+    // handleTickSyncOffset();
 
     // Handle change to BPM
     if (!m_newBpm.compareEq(m_currentBpm) && m_newBpm.isReasonable()) {
@@ -562,7 +602,7 @@ void MidiClockOut::tick() {
     }
 
     // m_plannedNextTickTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch() + m_currentTickLength);
-    m_maximumNextTickCutoffTime = m_plannedNextTickTime - m_tickCutOff;
+    // m_maximumNextTickCutoffTime = m_plannedNextTickTime - m_tickCutOff;
 
     m_ticksSinceBpmChange++;
     m_plannedNextTickTime = m_timeReceivedNewLeaderBpm + m_currentTickLength * m_ticksSinceBpmChange; 
@@ -674,7 +714,8 @@ void MidiClockOut::onCallbackStart(std::chrono::microseconds absTimeWhenPrevOutp
         return;
     }
 
-    //check leaders bpm
+    // TODO(Tuuli): Is this necessary? Would checking the sync instead make more sense, or not having checks at all?
+    //check leaders bpm 
     Syncable* target = m_pEngineSync->pickNonSyncSyncTarget(getChannel());
     if (target == nullptr) {
         return;
@@ -682,10 +723,10 @@ void MidiClockOut::onCallbackStart(std::chrono::microseconds absTimeWhenPrevOutp
     auto newSetBpm = target->getBpm();
     if (newSetBpm.isReasonable()) {
         m_newBpm = newSetBpm;
+        handleNewBPM();
     }
 
-    // qDebug() << "MidiClockOut::onCallbackStart()" << getHostTime(); // onCallbackStart is being called about every 10ms
-    
+    // qDebug() << "MidiClockOut::onCallbackStart()" << getHostTime(); // onCallbackStart is being called on the buffer size, for example every 10.7 ms if thats the audio devices buffer size
 }
 
 void MidiClockOut::onCallbackEnd(int sampleRate, size_t bufferSize) {
