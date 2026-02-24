@@ -73,7 +73,7 @@ class MidiClockOut : public QObject, public Syncable {
     }
     EngineChannel* getChannel() const override {
         return nullptr;
-    }
+    }   
     /// Notify a Syncable that their mode has changed. The Syncable must record
     /// this mode and return the latest mode in response to getMode().
     void setSyncMode(SyncMode mode) override;
@@ -90,7 +90,7 @@ class MidiClockOut : public QObject, public Syncable {
     bool isQuantized() const override;
     /// Gets the current speed of the syncable in bpm (bpm * rate slider), doesn't
     /// include scratch or FF/REW values.
-    mixxx::Bpm getBpm() const override;
+    mixxx::Bpm getBpm() const override;      
     /// Gets the beat distance as a fraction from 0 to 1
     double getBeatDistance() const override;
     /// Gets the speed of the syncable if it was playing at 1.0 rate.
@@ -115,17 +115,14 @@ class MidiClockOut : public QObject, public Syncable {
     /// occur.
     void updateInstantaneousBpm(mixxx::Bpm bpm) override;
     void onCallbackStart(std::chrono::microseconds absTimeWhenPrevOutputBufferReachesDac);
-    void onCallbackEnd(int sampleRate, size_t bufferSize);
-
-    void backSixteenth();
-    void fwdSixteenth();
+    void onCallbackEnd(int sampleRate, size_t bufferSize);   
 
   signals:
     void clockTick(double value, QObject* pSender);
     void clockStart(double value, QObject* pSender);
     void clockContinue(double value, QObject* pSender);
     void clockStop(double value, QObject* pSender);
-
+  
   private slots:    
     void callTick();
     void tick(uint8_t recurse_count);
@@ -142,13 +139,12 @@ class MidiClockOut : public QObject, public Syncable {
     QString m_group; ///< String for MidiClockOut in debug and controller, control object access
     EngineSync* m_pEngineSync; ///< Unowned, must outlive this class (copied from AbletonLink)
     SyncMode m_syncMode; ///< Syncables mode; either Follower or None or Invalid
-
+    
     mixxx::Bpm m_currentBpm; ///< Tempo equivalent to mV_currentTickLength
-    mixxx::Bpm m_oldTempo;
-    mixxx::Bpm m_currentBpm;
-    mixxx::Bpm m_newBpm;
+    mixxx::Bpm m_oldTempo; // remove?    
+    mixxx::Bpm m_newBpm; 
 
-    std::chrono::microseconds m_absTimeWhenPrevOutputBufferReachesDac;
+    std::chrono::microseconds m_absTimeWhenPrevOutputBufferReachesDac;    
     std::chrono::steady_clock::time_point m_plannedNextTickTime; //?
     std::chrono::microseconds m_newNextTickTime; //?
     std::chrono::microseconds m_differenceTickLength; //?
@@ -183,10 +179,10 @@ class MidiClockOut : public QObject, public Syncable {
     int32_t m_tickSyncOffset; ///< Stores sync tick offsets; difference from the latest update of the leaders sync position to MidiClockOuts sync position. Positive numbers mean the MidiClockOut ticks are behind the SyncLeaders phase and need to catchup.
     uint32_t mV_ticksSinceBpmChange; ///< Counter to use with mV_adjustedTimeReceivedNewBpm to calculate timepoints; multithreaded
 
-    bool m_skipNextTick;    
+    bool m_skipNextTick;        
     int16_t mV_tickAdjustment; ///< Number of ticks to skip or spam to beatjump or otherwise adjust position on external sequencers; multithreaded   
 
-        // QChronoTimerType m_ticknsTimer = QChronoTimerType(nullptr);
+    // QChronoTimerType m_ticknsTimer = QChronoTimerType(nullptr);
     // QChronoTimerType m_debugTimer = QChronoTimerType(nullptr);
 
     #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
@@ -196,21 +192,23 @@ class MidiClockOut : public QObject, public Syncable {
     QTimer m_ticknsTimer = QTimer(nullptr);
     QTimer m_debugTimer = QTimer(nullptr);
     #endif
-
     Qt::TimerId m_ticknsTimerID;
 
-    void handleTickSyncOffset();
+    //Tempo
     void handleNewBPM(); 
+    
+    //Sync
+    void restart(); ///< Restart all tick counters, all bpm adjusters, and the tick clock (if its running)
+    void backSixteenth(); ///< Move external device back 6 ticks
+    void fwdSixteenth(); ///< Move external device forward 6 ticks
+
+    void forceGetBeatDistance();    
     void skipTick();
-
-    void forceGetBeatDistance();
-
-    //Restart all tick counters, all bpm adjusters, and the tick clock (if its running)
-    void restart();
-
-    void sendMidiClockTick(); ///< Sends 0xF8 to portMidi device with midi_clock_out script mapped
     void adjustSyncTicks(int16_t tickAdjustment); ///< Plans a tick adjustment; thread reads and sends extra ticks, or skips ticks
-    void resetQueuedSyncTicks(); ///< Resets planned extra or skipped ticks to zero.
+    void resetQueuedSyncTicks();                  ///< Resets planned extra or skipped ticks to zero.
+
+    //MIDI
+    void sendMidiClockTick(); ///< Sends 0xF8 to portMidi device with midi_clock_out script mapped
     void sendMidiClockStart(); ///< Sends 0xFA to portMidi device with midi_clock_out script mapped
     void sendMidiClockContinue(); ///< Sends 0xFB to portMidi device with midi_clock_out script mapped
     void sendMidiClockStop(); ///< Sends 0xFC to portMidi device with midi_clock_out script mapped
@@ -242,5 +240,5 @@ class MidiClockOut : public QObject, public Syncable {
     std::chrono::microseconds getHostTime() const;
     std::chrono::microseconds getHostTimeAtSpeaker(std::chrono::microseconds hostTime) const;
     void debugBarTime();
-    
+
     };
