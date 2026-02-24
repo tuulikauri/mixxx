@@ -150,6 +150,7 @@ class MidiClockOut : public QObject, public Syncable {
     std::chrono::microseconds m_differenceTickLength; //?
 
     std::chrono::steady_clock::time_point mV_adjustedTimeReceivedNewBpm; ///< For calculating next timestamp with the new interval; multi-threaded    
+    std::chrono::nanoseconds m_tempoChangeSyncAdjustment; ///< Cumulative sync adjustments as tempo change happens between ticks
     std::chrono::microseconds m_timeReceivedNewLeaderBpmLate; //?    
     std::chrono::microseconds m_maximumNextTickCutoffTime; //?
     
