@@ -84,6 +84,7 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
           m_absTimeWhenPrevOutputBufferReachesDac(0),
           m_tempoChangeSyncAdjustment(0),
           mV_currentTickLength(kStartTickLength),
+          m_newTickLength(kStartTickLength),
           m_tickCutOff(ktickCutOff),
 
           m_enabled(false),
@@ -253,7 +254,7 @@ void MidiClockOut::slotControlOutEnabled(double controlButtonValue) {
         sendMidiClockStart();
 
         m_timeReceivedNewBpm = mV_adjustedTimeReceivedNewBpm = std::chrono::steady_clock::now();   
-        
+        mV_ticksSinceBpmChange = 0;
         m_tempoChangeSyncAdjustment = std::chrono::nanoseconds(0);
         mV_currentTickLength = tickLengthFromBpm(m_currentBpm.value());                 
 
@@ -265,11 +266,9 @@ void MidiClockOut::slotControlOutEnabled(double controlButtonValue) {
                 mV_currentTickLength));
 #endif
         m_ticknsTimer.start();            
-        m_ticknsTimerID = m_ticknsTimer.id();                        
-        
+        m_ticknsTimerID = m_ticknsTimer.id();                                
         m_pEngineSync->requestSyncMode(this, SyncMode::Follower);
-        m_pEngineSync->notifyPlayingAudible(this, true); // TODO(Tuuli): is this required? Will we get the leaders tempo if we're audible?
-
+        m_pEngineSync->notifyPlayingAudible(this, true); // TODO(Tuuli): is this required? Will we get the leaders tempo if we're audible?        
         //updateLeaderBpm(m_currentBpm); // Setup a new BPM change        
     } 
     else {
@@ -499,7 +498,8 @@ void MidiClockOut::adjustSyncTicks(int16_t tickAdjustment) {
     // mV_ticksSinceBpmChange is updated by the thread, and represents number of actually-sent ticks
     // m_tickCount is the GUI's tick counter
 
-    mV_tickAdjustment += tickAdjustment; // Adding lets ticks that havent been sent yet be cancelled, or accumulated.       
+    mV_tickAdjustment += tickAdjustment; // Adding lets ticks that havent been sent yet be cancelled, or accumulated.     
+    qDebug() << "MidiClockOut::adjustSyncTicks " << mV_tickAdjustment;
 }
 void MidiClockOut::resetQueuedSyncTicks() {
     mV_tickAdjustment = 0;        
@@ -531,28 +531,29 @@ void MidiClockOut::handleNewBPM() {
     if (m_newBpm.compareEq(m_currentBpm) || !(m_newBpm.isReasonable())) {                
         return;
     }    
-    qDebug() << "MidiClockOut::tick():handleNewBPM";
+    qDebug() << "MidiClockOut::tick():handleNewBPM" << m_newBpm;
     m_newTickLength = tickLengthFromBpm(m_newBpm.value());        
     m_currentBpm = m_newBpm;
+    if (m_enabled) {
+        // Calculate the % of tick from the current time and the next planned tick
+        // percent = duration since last tick / tickLength = (timeNow - timeLastTick) / tickLength
 
-    // Calculate the % of tick from the current time and the next planned tick
-    // percent = duration since last tick / tickLength = (timeNow - timeLastTick) / tickLength   
+        /// Percent of partial tick time elapsed since last tick
+        double tickPercent = (timeNow - (mV_ticksSinceBpmChange * mV_currentTickLength + mV_adjustedTimeReceivedNewBpm)) / mV_currentTickLength;
 
-    /// Percent of partial tick time elapsed since last tick
-    double tickPercent = (timeNow - (mV_ticksSinceBpmChange * mV_currentTickLength 
-            + mV_adjustedTimeReceivedNewBpm)) / mV_currentTickLength; 
-    
-    // adjustedStartTime = time it would start to be at percent NOW
-    // adjustedStartTime + percent * newLength = now
-    // adjustedStartTime = now - percent * newLength
-    auto tickStartAdjustTime = std::chrono::duration_cast<std::chrono::microseconds>(m_newTickLength * tickPercent);
-    mV_adjustedTimeReceivedNewBpm = timeNow - tickStartAdjustTime;      
+        // adjustedStartTime = time it would start to be at percent NOW
+        // adjustedStartTime + percent * newLength = now
+        // adjustedStartTime = now - percent * newLength
+        auto tickStartAdjustTime = std::chrono::duration_cast<std::chrono::microseconds>(m_newTickLength * tickPercent);
+        mV_adjustedTimeReceivedNewBpm = timeNow - tickStartAdjustTime;
 
-    auto partialIntervalNew = std::chrono::duration_cast<std::chrono::nanoseconds>(m_newTickLength * (1 - tickPercent));
-    auto partialIntervalOld = std::chrono::duration_cast<std::chrono::nanoseconds>(mV_currentTickLength * (1 - tickPercent));
+        auto partialIntervalNew = std::chrono::duration_cast<std::chrono::nanoseconds>(m_newTickLength * (1 - tickPercent));
+        auto partialIntervalOld = std::chrono::duration_cast<std::chrono::nanoseconds>(mV_currentTickLength * (1 - tickPercent));
 
-    m_tempoChangeSyncAdjustment += partialIntervalOld - partialIntervalNew; // negative = skip ticks (slower); positive = extra ticks (faster)
-    
+        m_tempoChangeSyncAdjustment += partialIntervalOld - partialIntervalNew; // negative = skip ticks (slower); positive = extra ticks (faster)
+    } else {
+        mV_adjustedTimeReceivedNewBpm = timeNow;
+    }
     /*
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
     m_ticknsTimer.setInterval(partialIntervalNew);
@@ -571,39 +572,51 @@ void MidiClockOut::callTick() {
     tick(0);
 }
 void MidiClockOut::tick(uint8_t recurse_count) {
-    qDebug() << "MidiClockOut::tick()" << mV_ticksSinceBpmChange << " * " << mV_currentTickLength << " + " << " - " << m_tempoChangeSyncAdjustment;
-    m_debugTickCounter++; // this is 0
-    mV_ticksSinceBpmChange++; // why would this be 49M? syncticks is 8M; mV_adjustedTimeReceivedNewBpm is 0; m_intervalLength = -4685900 nanoseconds
+    // qDebug() << "MidiClockOut::tick()" << mV_ticksSinceBpmChange << " * " << mV_currentTickLength <<  " - " << m_tempoChangeSyncAdjustment;
+    m_debugTickCounter++;
+    mV_ticksSinceBpmChange++;
 
     int32_t syncTicks = 0;
-       
-    auto timeNow = std::chrono::steady_clock::now();
     mV_currentTickLength = m_newTickLength;
 
-    m_plannedNextTickTime = mV_adjustedTimeReceivedNewBpm + (mV_currentTickLength * mV_ticksSinceBpmChange) - m_tempoChangeSyncAdjustment;
-    
-    auto timeDifference = timeNow - m_plannedNextTickTime;
-    uint8_t timeout = 0;
-    while (timeDifference > std::chrono::nanoseconds(0) && (timeout <100)) {        
-        syncTicks = (timeDifference / mV_currentTickLength) + 1;
-        adjustSyncTicks(syncTicks); //
-        mV_ticksSinceBpmChange += syncTicks;
-        m_plannedNextTickTime = mV_adjustedTimeReceivedNewBpm + (mV_currentTickLength * mV_ticksSinceBpmChange) - m_tempoChangeSyncAdjustment; 
-        timeDifference = timeNow - m_plannedNextTickTime;
-        timeout++;
+    if (m_enabled) {
+        auto timeNow = std::chrono::steady_clock::now();
+        // qDebug() << "MidiClockOut::tick() ELAPSED " << std::chrono::duration_cast<std::chrono::milliseconds>(timeNow - mV_adjustedTimeReceivedNewBpm);        
+        m_plannedNextTickTime = mV_adjustedTimeReceivedNewBpm + (mV_currentTickLength * mV_ticksSinceBpmChange) - m_tempoChangeSyncAdjustment;
+
+        //Account for late ticks by catching up
+        auto timeDifference = m_plannedNextTickTime - timeNow;
+        // qDebug() << "MidiClockOut::tick() DIFFERENCE " << std::chrono::duration_cast<std::chrono::milliseconds>(timeDifference);
+        if (timeDifference > mV_currentTickLength || (timeDifference <= std::chrono::nanoseconds(0))) {
+            qDebug() << timeDifference << "difference (long, or in the past)";
+            qDebug() << timeNow.time_since_epoch() << "now";
+            qDebug() << m_plannedNextTickTime.time_since_epoch() << "planned";
+            qDebug() << mV_adjustedTimeReceivedNewBpm.time_since_epoch() << "recd";
+        }
+        uint8_t timeout = 0;
+        while (m_plannedNextTickTime <= timeNow && (timeout < 100)) {
+            m_plannedNextTickTime = mV_adjustedTimeReceivedNewBpm + (mV_currentTickLength * 
+                    ++mV_ticksSinceBpmChange) - m_tempoChangeSyncAdjustment;
+            adjustSyncTicks(1);
+            timeout++;
+            syncTicks++;
+        }
+        m_tempoChangeSyncAdjustment = std::chrono::nanoseconds(0);
+
+        //Start next tick timer
+        m_intervalLength = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                m_plannedNextTickTime - timeNow);
+        qDebug() << "MidiClockOut::tick() INTERVAL " << std::chrono::duration_cast<std::chrono::milliseconds>(m_intervalLength) << timeout << syncTicks << "ticks" << mV_ticksSinceBpmChange;
+    #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+        m_ticknsTimer.setInterval(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                m_intervalLength));
+    #else
+        m_ticknsTimer.setInterval(std::chrono::duration_cast<std::chrono::milliseconds>(
+                m_intervalLength));
+    #endif
+        m_ticknsTimer.start(); // start a one-shot timer
+        m_ticknsTimerID = m_ticknsTimer.id();
     }
-    m_tempoChangeSyncAdjustment = std::chrono::nanoseconds(0);
-    m_intervalLength = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            m_plannedNextTickTime - timeNow);
-#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
-    m_ticknsTimer.setInterval(std::chrono::duration_cast<std::chrono::nanoseconds>(
-            m_intervalLength));
-#else
-    m_ticknsTimer.setInterval(std::chrono::duration_cast<std::chrono::milliseconds>(
-            m_intervalLength));
-#endif
-    m_ticknsTimer.start(); // start a one-shot timer
-    m_ticknsTimerID = m_ticknsTimer.id();           
 
     sendMidiClockTick();
     
