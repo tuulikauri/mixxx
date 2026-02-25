@@ -67,6 +67,7 @@
 #include "preferences/usersettings.h"
 #include "util/logger.h"
 
+
 namespace {
 const mixxx::Logger kLogger("MidiClockOut");
 constexpr mixxx::Bpm kDefaultBpm(9999.9);
@@ -282,9 +283,87 @@ void MidiClockOut::slotControlRestart(double controlButtonValue) {
     restart();    
 }
 
-void MidiClockOut::slotControlTick(double controlButtonValue) {  
+void MidiClockOut::slotControlTick(double controlButtonValue) {
     Q_UNUSED(controlButtonValue)
-    tick();
+    // TODO(Tuuli): Direct way to send Midi to the controller?
+    // CoreServices.getControllerManager.controller[i].getMappingScriptFiles.identifier == "midi_clock_out"
+    // controller.send(0xF8...)
+
+    qDebug() << "MidiClockOut::slotControlTick";
+    bool found = false;
+    QObject* pObject = this;    
+    
+    /*
+    EngineSync* pEngineSync = nullptr;    
+    pObject = pObject->parent();
+    while (!found && pObject) {
+        if (pObject) {
+            // pCoreServices = qobject_cast<CoreServices*>(pObject);
+            pEngineSync = qobject_cast<EngineSync*>(pObject);
+            if (pEngineSync)
+                found = true;
+            pObject = pObject->parent();
+        }
+    }
+    EngineChannel* pLeaderChannel = pEngineSync->getLeaderChannel();
+    auto newBeatDistance = pLeaderChannel->getEngineBuffer()->getExactPlayPos();
+    qDebug() << "MidiClockOut::slotControlTick beatdistance" << newBeatDistance.value();
+*/
+    /*
+    QColor findBaseColor(QWidget* pWidget) {
+        while (pWidget) {
+            if (pWidget->palette().isBrushSet(QPalette::Normal, QPalette::Base)) {
+                return pWidget->palette().color(QPalette::Base);
+            }
+            pWidget = qobject_cast<QWidget*>(pWidget->parent());
+        }
+        return QColor(0, 0, 0);
+    }
+*/
+
+    pObject = this;
+    found = false;
+    auto pCoreServicesg = qobject_cast<mixxx::CoreServices*>(pObject);   
+
+    //pObject = pObject->parent();
+    while (!found && pObject) {
+        qDebug() << "MidiClockOut::slotControlTick loop over parents" << pObject->objectName();        
+        if (pObject) {
+            pCoreServicesg = qobject_cast<mixxx::CoreServices*>(pObject);            
+            if (pCoreServicesg)
+                found = true;
+            pObject = pObject->parent();
+            //auto something = pObject->property("mapping");
+            //auto something2 = pObject->objectName();
+        }
+    }
+    if (found) {
+        qDebug() << "Found core services";
+        pCoreServices = (std::shared_ptr<mixxx::CoreServices>)pCoreServicesg;
+
+        // pseudocode
+        // initialize and find the Midi controller which is running the midi_clock_out mapping.
+        QList<Controller*> controller_list = pCoreServices.get()->getControllerManager()->getControllers();
+        if (!controller_list.isEmpty()) {
+            qDebug() << "Found controller List";
+            for (Controller* pController : controller_list) {
+                for (LegacyControllerMapping::ScriptFileInfo scriptInfo : pController->getMappingScriptFiles()) {
+                    if (scriptInfo.identifier == "midi_clock_out") {
+                        m_pMidiOutController = pController;
+                        qDebug() << "Found midi controller";
+                    }
+                }
+            }
+        }
+        // send
+
+        QByteArray tickMessage = QByteArray::fromHex("F80000");
+
+        // m_pMidiOutController->sendShortMsg(0xF8, (uint8_t)0x00, (uint8_t)0x00);
+        m_pMidiOutController->sendBytes(tickMessage);
+    } else {
+        qDebug() << "MidiClockOut::slotControlTick controller not found";
+    }
 }
 
 void MidiClockOut::slotControlNudgeFwd(double controlButtonValue) {
@@ -471,9 +550,6 @@ void MidiClockOut::debugBarTime() {
 }
 
 void MidiClockOut::sendMidiClockTick() {    
-    // TODO(Tuuli): Direct way to send Midi to the controller?
-    // CoreServices.getControllerManager.controller[i].getMappingScriptFiles.identifier == "midi_clock_out"
-    // controller.send(0xF8...)
     // TODO(Tuuli): account for mV_tickAdjustment here to skip ticks
     m_pMidiClockTick->setParameterFrom(m_tickCount % 16, this);
     qDebug() << "MidiClockOut::sendMidiClockTick() (0xF8 to portMidi)";

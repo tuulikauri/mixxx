@@ -855,3 +855,7 @@ Syncable* EngineSync::getUniquePlayingSyncedDeck() const {
     }
     return onlyPlaying;
 }
+
+MidiClockOut* EngineSync::getMidiClockOut() {
+    return m_pMidiClockOut;
+}

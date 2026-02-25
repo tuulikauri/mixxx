@@ -19,6 +19,15 @@ using timerDurationType = std::chrono::milliseconds;
 #include "engine/sync/syncable.h"
 #include "engine/sync/synccontrol.h"
 
+//////////////////////////////////////
+// Experiment to get to controller for midi
+#include "coreservices.h"
+#include "controllers/controllermanager.h"
+#include "controllers/controller.h"
+//class CoreServices;
+//class Controller;
+//////////////////////////////////////////
+ 
 /// This class manages a Midi clock output (0xF8)
 
 /// This class manages a Midi clock output (0xF8). It prioritizes maintaining the
@@ -218,6 +227,10 @@ class MidiClockOut : public QObject, public Syncable {
     void sendMidiClockStart(); ///< Sends 0xFA to portMidi device with midi_clock_out script mapped
     void sendMidiClockContinue(); ///< Sends 0xFB to portMidi device with midi_clock_out script mapped
     void sendMidiClockStop(); ///< Sends 0xFC to portMidi device with midi_clock_out script mapped
+
+    std::shared_ptr<mixxx::CoreServices> pCoreServices = nullptr;
+    std::shared_ptr<mixxx::CoreServices> pCoreServicesf = nullptr; 
+    Controller* m_pMidiOutController = nullptr;
 
     //Debug 
     std::chrono::microseconds m_barLengthMeasured;

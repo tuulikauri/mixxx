@@ -766,6 +766,35 @@ void CoreServices::initialize(QApplication* pApp) {
 
     ControllerScriptEngineBase::registerPlayerManager(getPlayerManager());
 
+    ///////////////////// TESTING TUULI
+    /* auto clockthing = m_pEngine.get()->getEngineSync()->getMidiClockOut();
+    auto foundmidi = m_pEngine->findChild<MidiClockOut>();
+    Controller* midiOutController = nullptr;
+    auto foundcontrollerslist = m_pControllerManager->findChildren<QList<Controller*>>();
+    if (!foundcontrollerslist.isEmpty()) {
+        qDebug() << "Found controller List";
+        for (Controller* pController : foundcontrollerslist) {
+            for (LegacyControllerMapping::ScriptFileInfo scriptInfo : pController->getMappingScriptFiles()) {
+                if (scriptInfo.identifier == "midi_clock_out") {
+                    midiOutController = pController;
+                    qDebug() << "Found midi controller";
+                }
+            }
+        }
+    }
+    auto foundscriptInfoList = m_pControllerManager->findChildren<LegacyControllerMapping>();
+    if (!foundscriptInfo.isEmpty()) {
+        qDebug() << "Found script List";
+        for (LegacyControllerMapping::ScriptFileInfo scriptInfo : foundscriptInfoList) {
+            if (scriptInfo.identifier == "midi_clock_out") {
+                midiOutController = pController;
+                qDebug() << "Found midi controller";
+            }            
+        }
+    }
+    */
+    /////////////////// WARNING EXPLOSIVE TESTS IN PROGRESS
+    
 #ifdef MIXXX_USE_QML
     initializeQMLSingletons();
 }
