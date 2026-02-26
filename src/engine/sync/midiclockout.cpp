@@ -51,6 +51,17 @@
     // currently the clock doesnt adopt tempo of a new leader until that leader changes their BPM...
     // Need to capture a notice about the new leader and then pull their BPM.
 
+//TODO(Tuuli) BUG Crashing on exit after edits in this branch; probably its the shared pointers not being garbaged correctly
+
+//TODO(Tuuli) BUG Crashing when swapping mapped devices (probably more garbage collection / pointer issues)
+
+//TODO(Tuuli) Make other Midi commands access the controller directly
+//TODO(Tuuli) Make Controller::sendBytes() invokable
+//TODO(Tuuli) Wtaf is up with the PortMidiController::sendBytes or Controller MIDI message parser? Is Arduinos MIDI.h open-source compatible with Mixxx, can we use that? It doesnt work for non-sysex Midi messages and assumes all messages are sysex... but its the only inherited MIDI sending function(sendBytes)
+//TODO(Tuuli) Try again to put threads back in
+//TODO(Tuuli) Why wasnt any messages received by MIDI-OX, was it just that portmidi errored out after a buffer overflow or something?
+//TODO(Tuuli) Sequenced buffer is needed for MIDI messages; make sure they are never sent out of order. How is this handled? Start-Stop is very different outcome from Stop-Start.
+
 #include "engine/sync/midiclockout.h"
 
 #include <QtDebug>
@@ -372,7 +383,30 @@ void MidiClockOut::slotControlTick(double controlButtonValue) {
         qDebug() << "MidiClockOut::slotControlTick controller not found";
     }
         */
-        QByteArray tickMessage = QByteArray::fromHex("F80000");
+    //TODO(Tuuli) Error with F80000
+    /* PortMidiController::sendBytes(const QByteArray& data) {
+        // PortMidi does not receive a length argument for the buffer we provide to
+        // Pm_WriteSysEx. Instead, it scans for a MidiOpCode::EndOfExclusive byte
+        // to know when the message is over. If one is not provided, it will
+        // overflow the buffer and cause a segfault.
+        if (!data.endsWith(MidiUtils::opCodeValue(MidiOpCode::EndOfExclusive))) {
+            qCDebug(m_logOutput) << "SysEx message does not end with 0xF7 -- ignoring.";
+
+
+            hacked with  PortMidiController::sendBytes edit
+            debug [Main] MidiClockOut::slotControlTick
+debug [Main] PortMidiController::sendBytes Trying to send short Realtime message
+debug [Main] "outgoing: " "loopMIDI Port 1:  status 0xF8"
+warning [Main] Error sending SysEx message: "loopMIDI Port 1:  3 byte sysex: [F8 00 00]"
+warning [Main] PortMidi error: PortMidi: Invalid MIDI message Data
+debug [Main] MidiClockOut::slotControlTick
+debug [Main] PortMidiController::sendBytes Trying to send short Realtime message
+debug [Main] "outgoing: " "loopMIDI Port 1:  status 0xF8"
+warning [Main] Error sending SysEx message: "loopMIDI Port 1:  3 byte sysex: [F8 00 00]"
+warning [Main] PortMidi error: PortMidi: Invalid MIDI message Data
+
+            */
+    QByteArray tickMessage = QByteArray::fromHex("F80000");
     if (m_pMidiClockOutController) {
         // m_pMidiOutController->sendShortMsg(0xF8, (uint8_t)0x00, (uint8_t)0x00);
         if (m_pMidiClockOutController->isOpen()) {
