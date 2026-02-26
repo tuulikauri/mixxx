@@ -1081,5 +1081,5 @@ bool EngineMixer::sidechainMixRequired() const {
 void EngineMixer::slotFoundMidiClockOut(QString name, std::shared_ptr<Controller> pMidiClockOutController) {
     //auto mco = m_pEngineSync->getMidiClockOut();
     qDebug() << "EngineMixer::slotFoundMidiClockOut sending to EngineSync";
-   // m_pEngineSync->setMidiClockOutController(pMidiClockOutController);
+    m_pEngineSync->setMidiClockOutController(pMidiClockOutController);
 }

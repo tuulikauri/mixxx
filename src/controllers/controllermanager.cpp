@@ -311,7 +311,7 @@ void ControllerManager::slotSetUpDevices() {
                 qDebug() << "Found MIDI Clock Out, emitting signal with pointer to controller.";
                 m_midiClockOutControllerName = deviceName;
                 m_pMidiClockOutController = std::shared_ptr<Controller>(pController);
-                //emit foundMidiClockOut(m_midiClockOutControllerName, m_pMidiClockOutController);    
+                emit foundMidiClockOut(m_midiClockOutControllerName, m_pMidiClockOutController);    
                 //emit foundMidiClockOut(deviceName, std::shared_ptr<Controller>(pController));
             }
         }
@@ -465,7 +465,7 @@ void ControllerManager::slotApplyMapping(Controller* pController,
             qDebug() << "Found MIDI Clock Out, emitting signals with pointer to controller.";            
             m_midiClockOutControllerName = sanitizeDeviceName(pController->getName());
             m_pMidiClockOutController = std::shared_ptr<Controller>(pController);
-            //emit foundMidiClockOut(m_midiClockOutControllerName, m_pMidiClockOutController);    
+            emit foundMidiClockOut(m_midiClockOutControllerName, m_pMidiClockOutController);    
         }
     } else {
         emit mappingApplied(false);

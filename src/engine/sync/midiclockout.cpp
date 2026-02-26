@@ -13,7 +13,7 @@
 // Testing CoreServices setting up a direct event, and detecting controllers that have Midi Clock Out assigned is buggy.
 
 
-// TODO(Tuuli): Should portMidi device have a buffer and timestamps? It might help, for beatjumping ahead especially..
+// TODO(Tuuli): Should portMidi device have a buffer and timestamps? It might help, for beatjumping ahead especially.. Saw this too... " warning [Controller] PortMidi error: PortMidi: Buffer overflow" output or input buffer?
 
 // TODO(Tuuli): MidiClockOut should be controllable if its the only item playing.     
     // The clock should keep playing at the previous tempo; 
