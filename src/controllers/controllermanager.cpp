@@ -287,8 +287,10 @@ void ControllerManager::slotSetUpDevices() {
             continue;
         }
         pMapping->loadSettings(m_pConfig, pController->getName());
+        
+        auto mappingName = pMapping->name();
 
-        // This runs on the main thread but LegacyControllerMapping is not thread safe, so clone it.
+        // This runs on the main thread but LegacyControllerMapping is not thread safe, so clone it.        
         pController->setMapping(std::move(pMapping));
 
         // If we are in safe mode, skip opening controllers.
@@ -303,6 +305,15 @@ void ControllerManager::slotSetUpDevices() {
         if (value != 0) {
             qWarning() << "There was a problem opening" << name;
             continue;
+        } 
+        else {
+            if (mappingName == "MIDI Clock Out") {
+                qDebug() << "Found MIDI Clock Out, emitting signal with pointer to controller.";
+                m_midiClockOutControllerName = deviceName;
+                m_pMidiClockOutController = std::shared_ptr<Controller>(pController);
+                //emit foundMidiClockOut(m_midiClockOutControllerName, m_pMidiClockOutController);    
+                //emit foundMidiClockOut(deviceName, std::shared_ptr<Controller>(pController));
+            }
         }
     }
 
@@ -390,9 +401,11 @@ void ControllerManager::openController(Controller* pController) {
     if (pController->isOpen()) {
         pController->close();
     }
-    int result = pController->open(m_pConfig->getResourcePath());
+    qDebug() << " ControllerManager::openController Opening controller... crash? Crashes here I think... (controller thread)";
+    int result = pController->open(m_pConfig->getResourcePath()); 
+    qDebug() << " ControllerManager::openController Polling controller... ";
     pollIfAnyControllersOpen();
-
+    qDebug() << " ControllerManager::openController Set results... ";
     // If successfully opened the device, apply the mapping and save the
     // preference setting.
     if (result == 0) {
@@ -400,6 +413,7 @@ void ControllerManager::openController(Controller* pController) {
         m_pConfig->setValue(
                 ConfigKey("[Controller]", sanitizeDeviceName(pController->getName())), 1);
     }
+    qDebug() << " ControllerManager::openController Done... ";
 }
 
 void ControllerManager::closeController(Controller* pController) {
@@ -418,7 +432,7 @@ void ControllerManager::closeController(Controller* pController) {
 // signaling thread can't alter the LegacyControllerMapping during applying
 void ControllerManager::slotApplyMapping(Controller* pController,
         std::shared_ptr<LegacyControllerMapping> pMapping,
-        bool bEnabled) {
+        bool bEnabled) {   
     VERIFY_OR_DEBUG_ASSERT(pController) {
         qWarning() << "slotApplyMapping got invalid controller!";
         return;
@@ -441,11 +455,18 @@ void ControllerManager::slotApplyMapping(Controller* pController,
     // Save the file path/name in the config so it can be auto-loaded at
     // startup next time
     m_pConfig->set(key, pMapping->filePath());
+    auto mappingName = pMapping->name();
 
     pController->setMapping(std::move(pMapping));
 
     if (bEnabled) {
         emit mappingApplied(pController->isMappable());
+        if (mappingName == "MIDI Clock Out") {
+            qDebug() << "Found MIDI Clock Out, emitting signals with pointer to controller.";            
+            m_midiClockOutControllerName = sanitizeDeviceName(pController->getName());
+            m_pMidiClockOutController = std::shared_ptr<Controller>(pController);
+            //emit foundMidiClockOut(m_midiClockOutControllerName, m_pMidiClockOutController);    
+        }
     } else {
         emit mappingApplied(false);
         return;
@@ -466,4 +487,8 @@ QList<QString> ControllerManager::getMappingPaths(UserSettingsPointer pConfig) {
     scriptPaths.append(userMappingsPath(pConfig));
     scriptPaths.append(resourceMappingsPath(pConfig));
     return scriptPaths;
+}
+
+std::shared_ptr<Controller> ControllerManager::getMidiClockOutControllerPtr() {
+    return m_pMidiClockOutController;
 }

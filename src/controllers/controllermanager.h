@@ -43,6 +43,8 @@ class ControllerManager : public QObject {
     void setUpDevices() { emit requestSetUpDevices(); };
 
     static QList<QString> getMappingPaths(UserSettingsPointer pConfig);
+    
+    std::shared_ptr<Controller> getMidiClockOutControllerPtr();
 
   signals:
     void devicesChanged();
@@ -50,6 +52,7 @@ class ControllerManager : public QObject {
     void requestShutdown();
     void requestInitialize();
     void mappingApplied(bool applied);
+    void foundMidiClockOut(QString name, std::shared_ptr<Controller> pMidiClockOutController);
 
   public slots:
     void slotApplyMapping(Controller* pController,
@@ -86,4 +89,6 @@ class ControllerManager : public QObject {
     QSharedPointer<MappingInfoEnumerator> m_pMainThreadUserMappingEnumerator;
     QSharedPointer<MappingInfoEnumerator> m_pMainThreadSystemMappingEnumerator;
     bool m_skipPoll;
+    QString m_midiClockOutControllerName;
+    std::shared_ptr<Controller> m_pMidiClockOutController;
 };

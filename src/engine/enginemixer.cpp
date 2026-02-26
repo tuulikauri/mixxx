@@ -1077,3 +1077,9 @@ void EngineMixer::registerNonEngineChannelSoundIO(gsl::not_null<SoundManager*> p
 bool EngineMixer::sidechainMixRequired() const {
     return m_pEngineSideChain && !m_bExternalRecordBroadcastInputConnected;
 }
+
+void EngineMixer::slotFoundMidiClockOut(QString name, std::shared_ptr<Controller> pMidiClockOutController) {
+    //auto mco = m_pEngineSync->getMidiClockOut();
+    qDebug() << "EngineMixer::slotFoundMidiClockOut sending to EngineSync";
+   // m_pEngineSync->setMidiClockOutController(pMidiClockOutController);
+}

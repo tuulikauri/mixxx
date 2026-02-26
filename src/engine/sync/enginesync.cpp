@@ -5,6 +5,7 @@
 #include "engine/channels/enginechannel.h"
 #include "engine/enginebuffer.h"
 #include "engine/sync/midiclockout.h"
+#include "controllers/controller.h"
 #include "engine/sync/abletonlink.h"
 #include "engine/sync/internalclock.h"
 #include "util/assert.h"
@@ -858,4 +859,7 @@ Syncable* EngineSync::getUniquePlayingSyncedDeck() const {
 
 MidiClockOut* EngineSync::getMidiClockOut() {
     return m_pMidiClockOut;
+}
+void EngineSync::setMidiClockOutController(std::shared_ptr<Controller> pMidiClockOutController) {
+    m_pMidiClockOut->setMidiClockOutController(pMidiClockOutController);
 }

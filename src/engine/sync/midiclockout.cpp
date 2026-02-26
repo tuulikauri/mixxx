@@ -6,7 +6,12 @@
     // Time 96 ticks and see what the result is
     // Time the beats from the beat_active or beat_distance controls, and see what the timed BPM is
 
-// TODO(Tuuli): midi out, 0xF8, and selecting a Midi device in a controller-mapping, controller thread
+// TODO(Tuuli): midi out, 0xF8, and selecting a Midi device in a controller-mapping, controller thread. 
+// Would it make sense to use this, or a similar port, for MidiClockOut?
+// pConfig->getValue(kMidiThroughCfgKey, false) ; QLatin1String(deviceInfo.name).startsWith(kMidiThroughPortPrefix)
+// Testing qObject->parent() recursion failed; looks like EngineSync doesnt have a parent assigned.
+// Testing CoreServices setting up a direct event, and detecting controllers that have Midi Clock Out assigned is buggy.
+
 
 // TODO(Tuuli): Should portMidi device have a buffer and timestamps? It might help, for beatjumping ahead especially..
 
@@ -238,6 +243,10 @@ MidiClockOut::~MidiClockOut() {
     m_pMidiClockStop.reset();
 }
 
+void MidiClockOut::setMidiClockOutController(std::shared_ptr<Controller> pMidiClockOutController) {
+    m_pMidiClockOutController = pMidiClockOutController;
+}
+
 // GUI Controls
 // Slots are called from the [Main] thread, so anything it calls is also called from [Main]
 
@@ -290,8 +299,10 @@ void MidiClockOut::slotControlTick(double controlButtonValue) {
     // controller.send(0xF8...)
 
     qDebug() << "MidiClockOut::slotControlTick";
+    /*
     bool found = false;
     QObject* pObject = this;    
+    */
     
     /*
     EngineSync* pEngineSync = nullptr;    
@@ -320,7 +331,7 @@ void MidiClockOut::slotControlTick(double controlButtonValue) {
         return QColor(0, 0, 0);
     }
 */
-
+    /*
     pObject = this;
     found = false;
     auto pCoreServicesg = qobject_cast<mixxx::CoreServices*>(pObject);   
@@ -332,7 +343,7 @@ void MidiClockOut::slotControlTick(double controlButtonValue) {
             pCoreServicesg = qobject_cast<mixxx::CoreServices*>(pObject);            
             if (pCoreServicesg)
                 found = true;
-            pObject = pObject->parent();
+            pObject = pObject->parent(); //this fails because EngineSync doesnt have its parent set.
             //auto something = pObject->property("mapping");
             //auto something2 = pObject->objectName();
         }
@@ -349,21 +360,27 @@ void MidiClockOut::slotControlTick(double controlButtonValue) {
             for (Controller* pController : controller_list) {
                 for (LegacyControllerMapping::ScriptFileInfo scriptInfo : pController->getMappingScriptFiles()) {
                     if (scriptInfo.identifier == "midi_clock_out") {
-                        m_pMidiOutController = pController;
+                        m_pMidiClockOutController = pController;
+                        
                         qDebug() << "Found midi controller";
                     }
                 }
             }
         }
         // send
-
-        QByteArray tickMessage = QByteArray::fromHex("F80000");
-
-        // m_pMidiOutController->sendShortMsg(0xF8, (uint8_t)0x00, (uint8_t)0x00);
-        m_pMidiOutController->sendBytes(tickMessage);
-    } else {
+        } else {
         qDebug() << "MidiClockOut::slotControlTick controller not found";
     }
+        */
+        QByteArray tickMessage = QByteArray::fromHex("F80000");
+    if (m_pMidiClockOutController) {
+        // m_pMidiOutController->sendShortMsg(0xF8, (uint8_t)0x00, (uint8_t)0x00);
+        if (m_pMidiClockOutController->isOpen()) {
+            m_pMidiClockOutController->sendBytes(tickMessage);
+        }        
+        //invoke instead so it can happen in the controller thread..
+    }
+
 }
 
 void MidiClockOut::slotControlNudgeFwd(double controlButtonValue) {

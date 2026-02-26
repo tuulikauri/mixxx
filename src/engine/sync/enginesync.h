@@ -9,6 +9,7 @@ class InternalClock;
 class AbletonLink;
 class MidiClockOut;
 class EngineChannel;
+class Controller;
 
 const QString kBpmConfigGroup = QStringLiteral("[BPM]");
 const QString kSyncLockAlgorithmConfigKey = QStringLiteral("sync_lock_algorithm");
@@ -79,6 +80,8 @@ class EngineSync : public SyncableListener {
     void onCallbackEnd(mixxx::audio::SampleRate sampleRate, std::size_t bufferSize);
 
     MidiClockOut* getMidiClockOut();
+    void setMidiClockOutController(std::shared_ptr<Controller> pMidiClockOutController);
+
 
   private:
     /// Iterate over decks, and based on sync and play status, pick a new Leader, or return the

@@ -31,6 +31,7 @@ class EngineEffectsManager;
 class EngineSync;
 class EngineTalkoverDucking;
 class EngineDelay;
+class Controller;
 
 // The number of channels to pre-allocate in various structures in the
 // engine. Prevents memory allocation in EngineMixer::addChannel.
@@ -238,7 +239,10 @@ class EngineMixer : public QObject, public AudioSource {
                              sizeof(long double)];
     };
 
-  protected:
+public slots:
+    void slotFoundMidiClockOut(QString name, std::shared_ptr<Controller> pMidiClockOutController);        
+
+protected:
     // The main buffer is protected so it can be accessed by test subclasses.
     mixxx::SampleBuffer m_main;
 
