@@ -44,7 +44,7 @@ class ControllerManager : public QObject {
 
     static QList<QString> getMappingPaths(UserSettingsPointer pConfig);
     
-    Controller* getMidiClockOutControllerPtr();
+    Controller* getMidiClockOutControllerPtr(); ///< Currently unused.
 
   signals:
     void devicesChanged();
@@ -52,8 +52,8 @@ class ControllerManager : public QObject {
     void requestShutdown();
     void requestInitialize();
     void mappingApplied(bool applied);    
-    void foundMidiClockOut(QString name, Controller* pMidiClockOutController);
-    void deleteMidiClockOut(QString name);
+    void foundMidiClockOut(QString name, Controller* pMidiClockOutController); ///< Signal connected in CoreServices to EngineMixer slot, used for transferring the Controller pointer to Midi Clock Out to use to send Midi directly to the connected controller.
+    void deleteMidiClockOut(QString name); ///< Signal connected in CoreServices to EngineMixer slot, used for alerting Midi Clock Out that the controller is about to be deleted by the ControllerManager (I think this happens in PortMidiEnumerator::~PortMidiEnumerator)
 
   public slots:
     void slotApplyMapping(Controller* pController,
@@ -90,6 +90,6 @@ class ControllerManager : public QObject {
     QSharedPointer<MappingInfoEnumerator> m_pMainThreadUserMappingEnumerator;
     QSharedPointer<MappingInfoEnumerator> m_pMainThreadSystemMappingEnumerator;
     bool m_skipPoll;
-    QString m_midiClockOutControllerName;    
-    Controller* m_pMidiClockOutController;
+    QString m_midiClockOutControllerName; ///< Device name of the device that is mapped to the Midi Clock Out mapping. Currently unused.
+    Controller* m_pMidiClockOutController; ///< Pointer emitted to MidiClockOut to use directly for 0xF8, FA, FB, FC Midi. Accessed every 5ms or more frequently by MidiClockOut thread.
 };

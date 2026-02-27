@@ -1,20 +1,21 @@
 // TODO(Tuuli): Mutexes, semaphors, thread protection? Any shared resources?
 
-// TODO(Tuuli): Audio playback / bpm is noticeably slower when mixxx isnt the focussed window; no difference with/without MCO enabled
+// TODO(Tuuli): write tests
 
-// TODO(Tuuli): FIXED with timestamps and oneshot timers instead::: Ticks are too slow, why? Timer? Could time 96 loops without other stuff happening...?
-    // Time 96 ticks and see what the result is
-    // Time the beats from the beat_active or beat_distance controls, and see what the timed BPM is
+// TODO(XXX): Audio playback / bpm is noticeably slower when mixxx isnt the focussed window; no difference with/without MCO enabled
 
-// TODO(Tuuli): midi out, 0xF8, and selecting a Midi device in a controller-mapping, controller thread. 
-// Would it make sense to use this, or a similar port, for MidiClockOut?
-// pConfig->getValue(kMidiThroughCfgKey, false) ; QLatin1String(deviceInfo.name).startsWith(kMidiThroughPortPrefix)
+// TODO(Tuuli): midi out methods, 0xF8, and selecting a Midi device in a controller-mapping, controller thread. 
+// Would it make sense to use MidiThroughPort, or open a similar virtual port, for MidiClockOut signals?
 // Testing qObject->parent() recursion failed; looks like EngineSync doesnt have a parent assigned.
-// Testing CoreServices setting up a direct event, and detecting controllers that have Midi Clock Out assigned is buggy.
+// Using CoreServices to Connect events across threads, and detecting controllers that have Midi Clock Out assigned. Some bugs.
+// Make Controller::sendBytes() invokable, or add a slotSendBytes? Should MidiClockOut use the Controller resource directly, or via signal/slots that allow messages to be sent in the Controller thread? 
 
+// TODO(Tuuli): Should portMidi device have a buffer and timestamps? It might help, for beatjumping ahead especially.. Saw this too... " warning [Controller] PortMidi error: PortMidi: Buffer overflow" is that the output or input buffer? Does the event queue act as a buffer of-sorts for portmidicontroller output?
+// TODO(Tuuli) Sequence is vital for MIDI messages; make sure they are never sent out of order. How is this handled? Start-Stop is very different outcome from Stop-Start. Events are always delivered in-order by Qt.
+// TODO(XXX) Fix the PortMidiController::sendBytes or Controller MIDI message parser? Is Arduinos MIDI.h open-source compatible with Mixxx, can we use that? Controller::sendBytes doesnt work for non-sysex Midi messages and assumes all messages are sysex... but its the only inherited MIDI sending function. Currently hacked to allow F8, FA, FB, FC
 
-// TODO(Tuuli): Should portMidi device have a buffer and timestamps? It might help, for beatjumping ahead especially.. Saw this too... " warning [Controller] PortMidi error: PortMidi: Buffer overflow" output or input buffer?
-
+// TODO(Tuuli): Send Continue FB on Enable without a stop; check if Stop-Start is best approach for restart, or if just Start will be sufficient as a default. Add settings option to enable Continue messages for users to choose what their sequencers receive
+ 
 // TODO(Tuuli): MidiClockOut should be controllable if its the only item playing.     
     // The clock should keep playing at the previous tempo; 
     // BUT... how to change tempo now? To drive external synths?
@@ -28,9 +29,7 @@
     // Not all clock followers will support a SYSEX command to switch their clocks.
     // But its probably the best we can do...
 
-// TODO(Tuuli): write tests
-
-// TODO(Tuuli): Not grabbing BPM when another playing syncable becomes leader - fixed now? Test, and remove redundant BPM-hoarding..
+// TODO(Tuuli): BUG Not grabbing BPM when another playing syncable becomes leader - fixed now? Test, and remove redundant BPM-hoarding..
     //If not, find a way to get Bpm...
     // auto otherBpm = m_pEngineSync->leaderBpm(); // private function
     // auto otherBeatDistance = m_pEngineSync->leaderBaseBpm(); //private function
@@ -51,16 +50,13 @@
     // currently the clock doesnt adopt tempo of a new leader until that leader changes their BPM...
     // Need to capture a notice about the new leader and then pull their BPM.
 
-//TODO(Tuuli) BUG Crashing on exit after edits in this branch; probably its the shared pointers not being garbaged correctly
+// TODO(Tuuli) BUG/incomplete following tempo changes doesnt work fully yet, it drifts off-beat from tempo changes. Lock to the beat position
 
-//TODO(Tuuli) BUG Crashing when swapping mapped devices (probably more garbage collection / pointer issues)
-
+// Direct access to Controller:
+//TODO(Tuuli) BUG Crashing when swapping mapped devices (probably garbage collection / pointer issues) Need to handle updates from ControllerManager similarly to initializing and shutdowns (probably can use the same functions / signals already wired up)
 //TODO(Tuuli) Make other Midi commands access the controller directly
-//TODO(Tuuli) Make Controller::sendBytes() invokable
-//TODO(Tuuli) Wtaf is up with the PortMidiController::sendBytes or Controller MIDI message parser? Is Arduinos MIDI.h open-source compatible with Mixxx, can we use that? It doesnt work for non-sysex Midi messages and assumes all messages are sysex... but its the only inherited MIDI sending function(sendBytes)
 //TODO(Tuuli) Try again to put threads back in
-//TODO(Tuuli) Why wasnt any messages received by MIDI-OX, was it just that portmidi errored out after a buffer overflow or something?
-//TODO(Tuuli) Sequenced buffer is needed for MIDI messages; make sure they are never sent out of order. How is this handled? Start-Stop is very different outcome from Stop-Start.
+//TODO(Tuuli) BUG Why no messages received by MIDI-OX, was it just that portmidi errored out after a buffer overflow or something? Try to reproduce by crashing / overflowing portmidi and see what happens... Swapping devices seemed to fix it last time...
 
 #include "engine/sync/midiclockout.h"
 
@@ -82,7 +78,6 @@
 #include "moc_midiclockout.cpp"
 #include "preferences/usersettings.h"
 #include "util/logger.h"
-
 
 namespace {
 const mixxx::Logger kLogger("MidiClockOut");
@@ -255,7 +250,6 @@ MidiClockOut::~MidiClockOut() {
 
     //Destroy pointer safely
     deleteMidiClockOutController();
-
 }
 
 void MidiClockOut::setMidiClockOutController(Controller* pMidiClockOutController) {
@@ -312,116 +306,15 @@ void MidiClockOut::slotControlRestart(double controlButtonValue) {
 
 void MidiClockOut::slotControlTick(double controlButtonValue) {
     Q_UNUSED(controlButtonValue)
-    // TODO(Tuuli): Direct way to send Midi to the controller?
-    // CoreServices.getControllerManager.controller[i].getMappingScriptFiles.identifier == "midi_clock_out"
-    // controller.send(0xF8...)
+    qDebug() << "MidiClockOut::slotControlTick";        
 
-    qDebug() << "MidiClockOut::slotControlTick";
-    /*
-    bool found = false;
-    QObject* pObject = this;    
-    */
-    
-    /*
-    EngineSync* pEngineSync = nullptr;    
-    pObject = pObject->parent();
-    while (!found && pObject) {
-        if (pObject) {
-            // pCoreServices = qobject_cast<CoreServices*>(pObject);
-            pEngineSync = qobject_cast<EngineSync*>(pObject);
-            if (pEngineSync)
-                found = true;
-            pObject = pObject->parent();
-        }
-    }
-    EngineChannel* pLeaderChannel = pEngineSync->getLeaderChannel();
-    auto newBeatDistance = pLeaderChannel->getEngineBuffer()->getExactPlayPos();
-    qDebug() << "MidiClockOut::slotControlTick beatdistance" << newBeatDistance.value();
-*/
-    /*
-    QColor findBaseColor(QWidget* pWidget) {
-        while (pWidget) {
-            if (pWidget->palette().isBrushSet(QPalette::Normal, QPalette::Base)) {
-                return pWidget->palette().color(QPalette::Base);
-            }
-            pWidget = qobject_cast<QWidget*>(pWidget->parent());
-        }
-        return QColor(0, 0, 0);
-    }
-*/
-    /*
-    pObject = this;
-    found = false;
-    auto pCoreServicesg = qobject_cast<mixxx::CoreServices*>(pObject);   
-
-    //pObject = pObject->parent();
-    while (!found && pObject) {
-        qDebug() << "MidiClockOut::slotControlTick loop over parents" << pObject->objectName();        
-        if (pObject) {
-            pCoreServicesg = qobject_cast<mixxx::CoreServices*>(pObject);            
-            if (pCoreServicesg)
-                found = true;
-            pObject = pObject->parent(); //this fails because EngineSync doesnt have its parent set.
-            //auto something = pObject->property("mapping");
-            //auto something2 = pObject->objectName();
-        }
-    }
-    if (found) {
-        qDebug() << "Found core services";
-        pCoreServices = (std::shared_ptr<mixxx::CoreServices>)pCoreServicesg;
-
-        // pseudocode
-        // initialize and find the Midi controller which is running the midi_clock_out mapping.
-        QList<Controller*> controller_list = pCoreServices.get()->getControllerManager()->getControllers();
-        if (!controller_list.isEmpty()) {
-            qDebug() << "Found controller List";
-            for (Controller* pController : controller_list) {
-                for (LegacyControllerMapping::ScriptFileInfo scriptInfo : pController->getMappingScriptFiles()) {
-                    if (scriptInfo.identifier == "midi_clock_out") {
-                        m_pMidiClockOutController = pController;
-                        
-                        qDebug() << "Found midi controller";
-                    }
-                }
-            }
-        }
-        // send
-        } else {
-        qDebug() << "MidiClockOut::slotControlTick controller not found";
-    }
-        */
-    //TODO(Tuuli) Error with F80000
-    /* PortMidiController::sendBytes(const QByteArray& data) {
-        // PortMidi does not receive a length argument for the buffer we provide to
-        // Pm_WriteSysEx. Instead, it scans for a MidiOpCode::EndOfExclusive byte
-        // to know when the message is over. If one is not provided, it will
-        // overflow the buffer and cause a segfault.
-        if (!data.endsWith(MidiUtils::opCodeValue(MidiOpCode::EndOfExclusive))) {
-            qCDebug(m_logOutput) << "SysEx message does not end with 0xF7 -- ignoring.";
-
-
-            hacked with  PortMidiController::sendBytes edit
-            debug [Main] MidiClockOut::slotControlTick
-debug [Main] PortMidiController::sendBytes Trying to send short Realtime message
-debug [Main] "outgoing: " "loopMIDI Port 1:  status 0xF8"
-warning [Main] Error sending SysEx message: "loopMIDI Port 1:  3 byte sysex: [F8 00 00]"
-warning [Main] PortMidi error: PortMidi: Invalid MIDI message Data
-debug [Main] MidiClockOut::slotControlTick
-debug [Main] PortMidiController::sendBytes Trying to send short Realtime message
-debug [Main] "outgoing: " "loopMIDI Port 1:  status 0xF8"
-warning [Main] Error sending SysEx message: "loopMIDI Port 1:  3 byte sysex: [F8 00 00]"
-warning [Main] PortMidi error: PortMidi: Invalid MIDI message Data
-
-            */
+    // TODO(Tuuli) Move this Proof of concept to other messages
     QByteArray tickMessage = QByteArray::fromHex("F80000");
-    if (m_pMidiClockOutController) {
-        // m_pMidiOutController->sendShortMsg(0xF8, (uint8_t)0x00, (uint8_t)0x00);
+    if (m_pMidiClockOutController) {        
         if (m_pMidiClockOutController->isOpen()) {
             m_pMidiClockOutController->sendBytes(tickMessage);
         }        
-        //invoke instead so it can happen in the controller thread..
     }
-
 }
 
 void MidiClockOut::slotControlNudgeFwd(double controlButtonValue) {
@@ -613,7 +506,7 @@ void MidiClockOut::sendMidiClockTick() {
     qDebug() << "MidiClockOut::sendMidiClockTick() (0xF8 to portMidi)";
 }
 void MidiClockOut::adjustSyncTicks(int16_t tickAdjustment) {     
-    // mV_ticksSinceBpmChange is updated by the thread, and represents number of actually-sent ticks
+    // mV_ticksSinceBpmChange is updated when a tick is sent, and represents number of actually-sent ticks
     // m_tickCount is the GUI's tick counter
 
     mV_tickAdjustment += tickAdjustment; // Adding lets ticks that havent been sent yet be cancelled, or accumulated.     

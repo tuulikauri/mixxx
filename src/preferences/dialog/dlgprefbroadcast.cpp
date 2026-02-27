@@ -223,7 +223,6 @@ void DlgPrefBroadcast::slotApply() {
     for (const auto& profile : broadcastProfiles) {
         QString profileName = profile->getProfileName();
         qWarning() << "--> slotApply()" << profileName;
-        qDebug() << "crashing soon? main thread..";
         if (!profile->validPassword()) {
             m_allProfilesValid = false;
             QMessageBox::warning(this,
@@ -294,9 +293,6 @@ void DlgPrefBroadcast::slotApply() {
     connectOnApply->setEnabled(!enabled);
 
     btnDisconnectAll->setEnabled(enabled);
-    
-    qDebug() << "DlgPrefBroadcast::slotApply done...crash? (main thread) Reaches this far before crashing..";
-
 }
 
 void DlgPrefBroadcast::broadcastEnabledChanged(double value) {

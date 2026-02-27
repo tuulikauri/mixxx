@@ -222,9 +222,7 @@ void PortMidiController::sendShortMsg(unsigned char status, unsigned char byte1,
     }
 }
 
-bool PortMidiController::sendBytes(const QByteArray& data) {
-
-    
+bool PortMidiController::sendBytes(const QByteArray& data) {    
     // PortMidi does not receive a length argument for the buffer we provide to
     // Pm_WriteSysEx. Instead, it scans for a MidiOpCode::EndOfExclusive byte
     // to know when the message is over. If one is not provided, it will
@@ -232,9 +230,9 @@ bool PortMidiController::sendBytes(const QByteArray& data) {
     if (data.startsWith(MidiUtils::opCodeValue(MidiOpCode::TimingClock)) || 
             data.startsWith(MidiUtils::opCodeValue(MidiOpCode::Start)) || 
             data.startsWith(MidiUtils::opCodeValue(MidiOpCode::Continue)) || 
-            data.startsWith(MidiUtils::opCodeValue(MidiOpCode::Stop))) {
-        qDebug() << "PortMidiController::sendBytes Trying to send short Realtime message";
-        sendShortMsg(data.at(0),(uint8_t)0x00, (uint8_t)0x00);
+            data.startsWith(MidiUtils::opCodeValue(MidiOpCode::Stop))) {        
+        // Hack to allow MidiClockOut to send short messages for it's realtime messages using a generic Controller class
+        sendShortMsg(data.at(0), (uint8_t)0x00, (uint8_t)0x00);
         return true;
     } else if (!data.endsWith(MidiUtils::opCodeValue(MidiOpCode::EndOfExclusive))) {
         qCDebug(m_logOutput) << "SysEx message does not end with 0xF7 -- ignoring.";

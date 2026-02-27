@@ -172,8 +172,9 @@ void ControllerManager::slotInitialize() {
 
 void ControllerManager::slotShutdown() {
     emit deleteMidiClockOut(m_midiClockOutControllerName);
-    stopPolling();
     m_pMidiClockOutController = nullptr;
+
+    stopPolling();    
 
     // Clear m_enumerators before deleting the enumerators to prevent other code
     // paths from accessing them.
@@ -402,11 +403,9 @@ void ControllerManager::openController(Controller* pController) {
     if (pController->isOpen()) {
         pController->close();
     }
-    qDebug() << " ControllerManager::openController Opening controller... crash? Crashes here I think... (controller thread)";
     int result = pController->open(m_pConfig->getResourcePath()); 
-    qDebug() << " ControllerManager::openController Polling controller... ";
     pollIfAnyControllersOpen();
-    qDebug() << " ControllerManager::openController Set results... ";
+
     // If successfully opened the device, apply the mapping and save the
     // preference setting.
     if (result == 0) {
@@ -414,7 +413,6 @@ void ControllerManager::openController(Controller* pController) {
         m_pConfig->setValue(
                 ConfigKey("[Controller]", sanitizeDeviceName(pController->getName())), 1);
     }
-    qDebug() << " ControllerManager::openController Done... ";
 }
 
 void ControllerManager::closeController(Controller* pController) {
@@ -433,7 +431,7 @@ void ControllerManager::closeController(Controller* pController) {
 // signaling thread can't alter the LegacyControllerMapping during applying
 void ControllerManager::slotApplyMapping(Controller* pController,
         std::shared_ptr<LegacyControllerMapping> pMapping,
-        bool bEnabled) {   
+        bool bEnabled) {
     VERIFY_OR_DEBUG_ASSERT(pController) {
         qWarning() << "slotApplyMapping got invalid controller!";
         return;

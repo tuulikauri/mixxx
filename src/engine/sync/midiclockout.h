@@ -19,14 +19,7 @@ using timerDurationType = std::chrono::milliseconds;
 #include "engine/sync/syncable.h"
 #include "engine/sync/synccontrol.h"
 
-//////////////////////////////////////
-// Experiment to get to controller for midi
-#include "coreservices.h"
-#include "controllers/controllermanager.h"
 #include "controllers/controller.h"
-//class CoreServices;
-//class Controller;
-//////////////////////////////////////////
  
 /// This class manages a Midi clock output (0xF8)
 
@@ -150,8 +143,8 @@ class MidiClockOut : public QObject, public Syncable {
     void onCallbackStart(std::chrono::microseconds absTimeWhenPrevOutputBufferReachesDac);
     void onCallbackEnd(int sampleRate, size_t bufferSize);   
 
-    void setMidiClockOutController(Controller* pMidiClockOutController);
-    void deleteMidiClockOutController();
+    void setMidiClockOutController(Controller* pMidiClockOutController); ///< Sets the controller mapped to "Midi Clock Out"; triggered when a signal is emitted to EngineMixer from the ControllerManager
+    void deleteMidiClockOutController(); ///< Cleans up to avoid dangling pointers; triggered from ControllerManager during shutdown
 
   signals:
     void clockTick(double value, QObject* pSender);
@@ -231,9 +224,7 @@ class MidiClockOut : public QObject, public Syncable {
     void sendMidiClockContinue(); ///< Sends 0xFB to portMidi device with midi_clock_out script mapped
     void sendMidiClockStop(); ///< Sends 0xFC to portMidi device with midi_clock_out script mapped
 
-    //std::shared_ptr<mixxx::CoreServices> pCoreServices = nullptr;
-    //std::shared_ptr<mixxx::CoreServices> pCoreServicesf = nullptr; 
-    Controller* m_pMidiClockOutController = nullptr; ///< Duplicate unowned pointer to the Controller linked to Midi Clock Out mapping   
+    Controller* m_pMidiClockOutController = nullptr; ///< Duplicate unowned pointer to the Controller that is linked to Midi Clock Out mapping   
 
     //Debug 
     std::chrono::microseconds m_barLengthMeasured;
