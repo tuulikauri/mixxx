@@ -860,6 +860,9 @@ Syncable* EngineSync::getUniquePlayingSyncedDeck() const {
 MidiClockOut* EngineSync::getMidiClockOut() {
     return m_pMidiClockOut;
 }
-void EngineSync::setMidiClockOutController(std::shared_ptr<Controller> pMidiClockOutController) {
+void EngineSync::setMidiClockOutController(Controller* pMidiClockOutController) {
     m_pMidiClockOut->setMidiClockOutController(pMidiClockOutController);
+}
+void EngineSync::deleteMidiClockOutController() {
+    m_pMidiClockOut->deleteMidiClockOutController();
 }

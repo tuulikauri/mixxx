@@ -1078,8 +1078,11 @@ bool EngineMixer::sidechainMixRequired() const {
     return m_pEngineSideChain && !m_bExternalRecordBroadcastInputConnected;
 }
 
-void EngineMixer::slotFoundMidiClockOut(QString name, std::shared_ptr<Controller> pMidiClockOutController) {
-    //auto mco = m_pEngineSync->getMidiClockOut();
+void EngineMixer::slotFoundMidiClockOut(QString name, Controller* pMidiClockOutController) {
     qDebug() << "EngineMixer::slotFoundMidiClockOut sending to EngineSync";
     m_pEngineSync->setMidiClockOutController(pMidiClockOutController);
+}
+void EngineMixer::slotDeleteMidiClockOut(QString name) {
+    qDebug() << "EngineMixer::slotDeleteMidiClockOut sending to EngineSync";
+    m_pEngineSync->deleteMidiClockOutController();
 }

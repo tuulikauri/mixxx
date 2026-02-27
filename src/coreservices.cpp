@@ -796,6 +796,7 @@ void CoreServices::initialize(QApplication* pApp) {
     */
     qDebug() << "Making Midi Clock Out connection in CoreServices";
     connect(m_pControllerManager.get(), &ControllerManager::foundMidiClockOut, m_pEngine.get(), &EngineMixer::slotFoundMidiClockOut, Qt::QueuedConnection);    
+    connect(m_pControllerManager.get(), &ControllerManager::deleteMidiClockOut, m_pEngine.get(), &EngineMixer::slotDeleteMidiClockOut, Qt::QueuedConnection);  
     //&DlgPrefControllers::rescanControllers
     /////////////////// WARNING EXPLOSIVE TESTS IN PROGRESS
     

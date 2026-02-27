@@ -79,8 +79,9 @@ class EngineSync : public SyncableListener {
             std::chrono::microseconds absTimeWhenPrevOutputBufferReachesDac);
     void onCallbackEnd(mixxx::audio::SampleRate sampleRate, std::size_t bufferSize);
 
-    MidiClockOut* getMidiClockOut();
-    void setMidiClockOutController(std::shared_ptr<Controller> pMidiClockOutController);
+    MidiClockOut* getMidiClockOut();    
+    void setMidiClockOutController(Controller* pMidiClockOutController);
+    void deleteMidiClockOutController();
 
 
   private:

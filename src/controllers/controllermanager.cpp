@@ -171,7 +171,9 @@ void ControllerManager::slotInitialize() {
 }
 
 void ControllerManager::slotShutdown() {
+    emit deleteMidiClockOut(m_midiClockOutControllerName);
     stopPolling();
+    m_pMidiClockOutController = nullptr;
 
     // Clear m_enumerators before deleting the enumerators to prevent other code
     // paths from accessing them.
@@ -309,10 +311,9 @@ void ControllerManager::slotSetUpDevices() {
         else {
             if (mappingName == "MIDI Clock Out") {
                 qDebug() << "Found MIDI Clock Out, emitting signal with pointer to controller.";
-                m_midiClockOutControllerName = deviceName;
-                m_pMidiClockOutController = std::shared_ptr<Controller>(pController);
-                emit foundMidiClockOut(m_midiClockOutControllerName, m_pMidiClockOutController);    
-                //emit foundMidiClockOut(deviceName, std::shared_ptr<Controller>(pController));
+                m_midiClockOutControllerName = deviceName;                
+                m_pMidiClockOutController = pController;
+                emit foundMidiClockOut(m_midiClockOutControllerName, m_pMidiClockOutController);                    
             }
         }
     }
@@ -464,7 +465,7 @@ void ControllerManager::slotApplyMapping(Controller* pController,
         if (mappingName == "MIDI Clock Out") {
             qDebug() << "Found MIDI Clock Out, emitting signals with pointer to controller.";            
             m_midiClockOutControllerName = sanitizeDeviceName(pController->getName());
-            m_pMidiClockOutController = std::shared_ptr<Controller>(pController);
+            m_pMidiClockOutController = pController;
             emit foundMidiClockOut(m_midiClockOutControllerName, m_pMidiClockOutController);    
         }
     } else {
@@ -489,6 +490,6 @@ QList<QString> ControllerManager::getMappingPaths(UserSettingsPointer pConfig) {
     return scriptPaths;
 }
 
-std::shared_ptr<Controller> ControllerManager::getMidiClockOutControllerPtr() {
+Controller* ControllerManager::getMidiClockOutControllerPtr() {
     return m_pMidiClockOutController;
 }

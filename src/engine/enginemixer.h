@@ -239,10 +239,11 @@ class EngineMixer : public QObject, public AudioSource {
                              sizeof(long double)];
     };
 
-public slots:
-    void slotFoundMidiClockOut(QString name, std::shared_ptr<Controller> pMidiClockOutController);        
+public slots:     
+    void slotFoundMidiClockOut(QString name, Controller* pMidiClockOutController);        
+    void slotDeleteMidiClockOut(QString name);
 
-protected:
+  protected:
     // The main buffer is protected so it can be accessed by test subclasses.
     mixxx::SampleBuffer m_main;
 

@@ -252,10 +252,17 @@ MidiClockOut::~MidiClockOut() {
     m_pMidiClockStart.reset();
     m_pMidiClockContinue.reset();
     m_pMidiClockStop.reset();
+
+    //Destroy pointer safely
+    deleteMidiClockOutController();
+
 }
 
-void MidiClockOut::setMidiClockOutController(std::shared_ptr<Controller> pMidiClockOutController) {
+void MidiClockOut::setMidiClockOutController(Controller* pMidiClockOutController) {
     m_pMidiClockOutController = pMidiClockOutController;
+}
+void MidiClockOut::deleteMidiClockOutController() {
+    m_pMidiClockOutController = nullptr;
 }
 
 // GUI Controls

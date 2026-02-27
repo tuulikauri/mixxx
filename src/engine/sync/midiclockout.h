@@ -150,7 +150,8 @@ class MidiClockOut : public QObject, public Syncable {
     void onCallbackStart(std::chrono::microseconds absTimeWhenPrevOutputBufferReachesDac);
     void onCallbackEnd(int sampleRate, size_t bufferSize);   
 
-    void setMidiClockOutController(std::shared_ptr<Controller> pMidiClockOutController);
+    void setMidiClockOutController(Controller* pMidiClockOutController);
+    void deleteMidiClockOutController();
 
   signals:
     void clockTick(double value, QObject* pSender);
@@ -170,7 +171,7 @@ class MidiClockOut : public QObject, public Syncable {
   private:
     // ableton::link::HostTimeFilter<MixxxClockRef> m_hostTimeFilter;
     QString m_group; ///< String for MidiClockOut in debug and controller, control object access
-    EngineSync* m_pEngineSync; ///< Unowned, must outlive this class (copied from AbletonLink)
+    EngineSync* m_pEngineSync; ///< Unowned, must outlive this class
     SyncMode m_syncMode; ///< Syncables mode; either Follower or None or Invalid    
 
     mixxx::Bpm m_currentBpm; ///< Tempo equivalent to mV_currentTickLength      
@@ -230,10 +231,9 @@ class MidiClockOut : public QObject, public Syncable {
     void sendMidiClockContinue(); ///< Sends 0xFB to portMidi device with midi_clock_out script mapped
     void sendMidiClockStop(); ///< Sends 0xFC to portMidi device with midi_clock_out script mapped
 
-    std::shared_ptr<mixxx::CoreServices> pCoreServices = nullptr;
-    std::shared_ptr<mixxx::CoreServices> pCoreServicesf = nullptr; 
-    Controller* m_pMidiOutController = nullptr;
-    std::shared_ptr<Controller> m_pMidiClockOutController = nullptr;
+    //std::shared_ptr<mixxx::CoreServices> pCoreServices = nullptr;
+    //std::shared_ptr<mixxx::CoreServices> pCoreServicesf = nullptr; 
+    Controller* m_pMidiClockOutController = nullptr; ///< Duplicate unowned pointer to the Controller linked to Midi Clock Out mapping   
 
     //Debug 
     std::chrono::microseconds m_barLengthMeasured;
