@@ -54,7 +54,6 @@
 
 // Direct access to Controller:
 //TODO(Tuuli) BUG Crashing when swapping mapped devices (probably garbage collection / pointer issues) Need to handle updates from ControllerManager similarly to initializing and shutdowns (probably can use the same functions / signals already wired up)
-//TODO(Tuuli) Make other Midi commands access the controller directly
 //TODO(Tuuli) Try again to put threads back in
 //TODO(Tuuli) BUG Why no messages received by MIDI-OX, was it just that portmidi errored out after a buffer overflow or something? Try to reproduce by crashing / overflowing portmidi and see what happens... Swapping devices seemed to fix it last time...
 
@@ -306,15 +305,8 @@ void MidiClockOut::slotControlRestart(double controlButtonValue) {
 
 void MidiClockOut::slotControlTick(double controlButtonValue) {
     Q_UNUSED(controlButtonValue)
-    qDebug() << "MidiClockOut::slotControlTick";        
-
-    // TODO(Tuuli) Move this Proof of concept to other messages
-    QByteArray tickMessage = QByteArray::fromHex("F80000");
-    if (m_pMidiClockOutController) {        
-        if (m_pMidiClockOutController->isOpen()) {
-            m_pMidiClockOutController->sendBytes(tickMessage);
-        }        
-    }
+    qDebug() << "MidiClockOut::slotControlTick";            
+    tick();
 }
 
 void MidiClockOut::slotControlNudgeFwd(double controlButtonValue) {
@@ -500,33 +492,61 @@ void MidiClockOut::debugBarTime() {
     mflag_bpmChangedThisBar = false;
 }
 
+bool MidiClockOut::sendDirectRTMidi(uint8_t status) {
+    QByteArray tickMessage;
+    if (status == (uint8_t)0xF8) {
+        tickMessage = QByteArray::fromHex("F80000");
+    } else if (status == (uint8_t)0xFA) {
+        tickMessage = QByteArray::fromHex("FA0000");
+    } else if (status == (uint8_t)0xFB) {
+        tickMessage = QByteArray::fromHex("FB0000");
+    } else if (status == (uint8_t)0xFC) {
+        tickMessage = QByteArray::fromHex("FC0000");
+    } else {
+        return false;
+    }
+
+    if (m_pMidiClockOutController) {
+        if (m_pMidiClockOutController->isOpen()) {
+            return (m_pMidiClockOutController->sendBytes(tickMessage));
+        }
+    }
+
+    return false;
+}
 void MidiClockOut::sendMidiClockTick() {    
     // TODO(Tuuli): account for mV_tickAdjustment here to skip ticks
-    m_pMidiClockTick->setParameterFrom(m_tickCount % 16, this);
+    //m_pMidiClockTick->setParameterFrom(m_tickCount % 16, this);
+    sendDirectRTMidi((uint8_t)0xF8);
     qDebug() << "MidiClockOut::sendMidiClockTick() (0xF8 to portMidi)";
 }
-void MidiClockOut::adjustSyncTicks(int16_t tickAdjustment) {     
-    // mV_ticksSinceBpmChange is updated when a tick is sent, and represents number of actually-sent ticks
-    // m_tickCount is the GUI's tick counter
-
-    mV_tickAdjustment += tickAdjustment; // Adding lets ticks that havent been sent yet be cancelled, or accumulated.     
-    qDebug() << "MidiClockOut::adjustSyncTicks " << mV_tickAdjustment;
-}
-void MidiClockOut::resetQueuedSyncTicks() {
-    mV_tickAdjustment = 0;        
-}
 void MidiClockOut::sendMidiClockStart() {    
-    m_pMidiClockStart->setParameterFrom(m_tickCount % 16, this);
+    //m_pMidiClockStart->setParameterFrom(m_tickCount % 16, this);
+    sendDirectRTMidi((uint8_t)0xFA);
     qDebug() << "MidiClockOut::sendMidiClockStart() (0xFA to portMidi)";
 }
 void MidiClockOut::sendMidiClockContinue() {    
-    m_pMidiClockContinue->setParameterFrom(m_tickCount % 16, this);
+    //m_pMidiClockContinue->setParameterFrom(m_tickCount % 16, this);
+    sendDirectRTMidi((uint8_t)0xFB);
     qDebug() << "MidiClockOut::sendMidiClockContinue() (0xFB to portMidi)";
 }
 void MidiClockOut::sendMidiClockStop() {    
-    m_pMidiClockStop->setParameterFrom(m_tickCount % 16, this);
+    //m_pMidiClockStop->setParameterFrom(m_tickCount % 16, this);
+    sendDirectRTMidi((uint8_t)0xFC);
     qDebug() << "MidiClockOut::sendMidiClockStop() (0xFC to portMidi)";
 }
+
+void MidiClockOut::adjustSyncTicks(int16_t tickAdjustment) {
+    // mV_ticksSinceBpmChange is updated when a tick is sent, and represents number of actually-sent ticks
+    // m_tickCount is the GUI's tick counter
+
+    mV_tickAdjustment += tickAdjustment; // Adding lets ticks that havent been sent yet be cancelled, or accumulated.
+    qDebug() << "MidiClockOut::adjustSyncTicks " << mV_tickAdjustment;
+}
+void MidiClockOut::resetQueuedSyncTicks() {
+    mV_tickAdjustment = 0;
+}
+
 /// @brief Update in the [EngineSync] thread when the BPM is available
 /// Called by: 
 /// updateLeaderBpm(mixxx::Bpm bpm); 

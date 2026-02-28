@@ -219,12 +219,14 @@ class MidiClockOut : public QObject, public Syncable {
     void resetQueuedSyncTicks();                  ///< Resets planned extra or skipped ticks to zero.
 
     //MIDI
+    bool sendDirectRTMidi(uint8_t status); ///< Sends 3 byte {status, 00, 00} to m_pMidiClockOutController
+
     void sendMidiClockTick(); ///< Sends 0xF8 to portMidi device with midi_clock_out script mapped
     void sendMidiClockStart(); ///< Sends 0xFA to portMidi device with midi_clock_out script mapped
     void sendMidiClockContinue(); ///< Sends 0xFB to portMidi device with midi_clock_out script mapped
     void sendMidiClockStop(); ///< Sends 0xFC to portMidi device with midi_clock_out script mapped
 
-    Controller* m_pMidiClockOutController = nullptr; ///< Duplicate unowned pointer to the Controller that is linked to Midi Clock Out mapping   
+    Controller* m_pMidiClockOutController = nullptr; ///< Duplicate unowned pointer to the Controller that is linked to Midi Clock Out mapping       
 
     //Debug 
     std::chrono::microseconds m_barLengthMeasured;
