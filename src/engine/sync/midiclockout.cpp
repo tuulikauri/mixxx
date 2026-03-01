@@ -505,6 +505,11 @@ void MidiClockOut::debugBarTime() {
 }
 
 bool MidiClockOut::sendDirectRTMidi(uint8_t status) {
+    if (m_midiStyleThread) {        
+        //return (m_pMidiClockOutThread->sendDirectRTMidi(status));
+        return (m_pMidiClockOutThread->queueDirectRTMidi(status));
+    }
+
     QByteArray tickMessage;
     if (status == (uint8_t)0xF8) {
         tickMessage = QByteArray::fromHex("F80000");
@@ -518,9 +523,7 @@ bool MidiClockOut::sendDirectRTMidi(uint8_t status) {
         return false;
     }
 
-    if (m_midiStyleThread) {
-        return (m_pMidiClockOutThread->sendDirectRTMidi(status));
-    } else if (m_pMidiClockOutController) {
+    if (m_pMidiClockOutController) {
         if (m_pMidiClockOutController->isOpen()) {
             return (m_pMidiClockOutController->sendBytes(tickMessage));
         }
@@ -532,7 +535,7 @@ void MidiClockOut::sendMidiClockTick() {
     // TODO(Tuuli): account for mV_tickAdjustment here to skip ticks
     //m_pMidiClockTick->setParameterFrom(m_tickCount % 16, this);
     sendDirectRTMidi((uint8_t)0xF8);
-    qDebug() << "MidiClockOut::sendMidiClockTick() (0xF8 to portMidi)";
+    //qDebug() << "MidiClockOut::sendMidiClockTick() (0xF8 to portMidi)";
 }
 void MidiClockOut::sendMidiClockStart() {    
     //m_pMidiClockStart->setParameterFrom(m_tickCount % 16, this);

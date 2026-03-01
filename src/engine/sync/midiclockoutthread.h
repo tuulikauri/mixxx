@@ -56,7 +56,7 @@ public:
     void stopPlease();
     void startMidiClockOutThread();
 
-    void queueDirectRTMidi(uint8_t status); ///< Adds status to the queue of MIDI data to send
+    bool queueDirectRTMidi(uint8_t status); ///< Adds status to the queue of MIDI data to send
     bool sendDirectRTMidi(uint8_t status);  ///< Sends the next byte of MIDI data and removes it from midiFIFOQueue
     void setMidiClockOutController(Controller* pMidiClockOutController);
     void deleteMidiClockOutController();

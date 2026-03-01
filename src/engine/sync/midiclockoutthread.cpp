@@ -24,7 +24,7 @@ MidiClockOutThread::MidiClockOutThread(MidiClockOut* parent) :
           m_midiFIFOQueue(512) {    
     this->setObjectName("MidiClockOutThread");    
     m_pMidiFIFOQueue = &m_midiFIFOQueue;
-    qDebug() << "MidiClockOutThread::Create ";
+    qDebug() << "MidiClockOutThread::Created ";
 }
 MidiClockOutThread::~MidiClockOutThread() {
     qDebug() << "MidiClockOutThread::destroy ";
@@ -38,24 +38,36 @@ MidiClockOutThread::~MidiClockOutThread() {
 }
 
 // Adds status to the queue of MIDI data to send
-void MidiClockOutThread::queueDirectRTMidi(uint8_t status) {
+bool MidiClockOutThread::queueDirectRTMidi(uint8_t status) {
     const QMutexLocker locker(&midiMutex);
     if (m_pMidiFIFOQueue->write(&status, 1) == 1) {
-        qDebug() << "MidiClockOutThread::queueDirectRTMidi" << status;
+        //qDebug() << "MidiClockOutThread::queueDirectRTMidi" << status;
+        return true;
     }
+    return false;
 }
 // Sends MIDI data
-bool MidiClockOutThread::sendDirectRTMidi(uint8_t status) {
-    //return (m_pMidiClockOutController->sendMidi(status));
-    /*
+bool MidiClockOutThread::sendDirectRTMidi(uint8_t status) {    
+    QByteArray midiRTMessage;    
+    if (status == (uint8_t)0xF8) {
+        midiRTMessage = QByteArray::fromHex("F80000");
+    } else if (status == (uint8_t)0xFA) {
+        midiRTMessage = QByteArray::fromHex("FA0000");
+    } else if (status == (uint8_t)0xFB) {
+        midiRTMessage = QByteArray::fromHex("FB0000");
+    } else if (status == (uint8_t)0xFC) {
+        midiRTMessage = QByteArray::fromHex("FC0000");
+    } else {
+        return false;
+    }
+
     if (m_pMidiClockOutController) {
         if (m_pMidiClockOutController->isOpen()) {
-            return (m_pMidiClockOutController->sendBytes(tickMessage));
+            return (m_pMidiClockOutController->sendBytes(midiRTMessage));
         }
     }
-    */
-    qDebug() << "MidiClockOutThread::sendDirectRTMidi (not sent yet; just this msg): " << status;
-    return true;
+    //qDebug() << "MidiClockOutThread::sendDirectRTMidi, sent " << status;
+    return false;
 }
 void MidiClockOutThread::setMidiClockOutController(Controller* pMidiClockOutController) {
     m_pMidiClockOutController = pMidiClockOutController; ///< Duplicate unowned pointer to the Controller that is linked to Midi Clock Out mapping
@@ -88,8 +100,13 @@ void MidiClockOutThread::run() {
             uint8_t data;
             if(m_pMidiFIFOQueue->read(&data, 1) == 1){
                 midiMutex.unlock();
-                sendDirectRTMidi(data);
+                if (sendDirectRTMidi(data)) {
+                    //qDebug() << "MidiClockOutThread::sendDirectRTMidi, sent " << data;
+                } else {
+                    qDebug() << "MidiClockOutThread::sendDirectRTMidi, failed to send " << data;
+                }
             } else {
+                qWarning() << "MidiClockOutThread, failed to read FIFO buffer but it has data ";
                 midiMutex.unlock();
             }
         } else {
