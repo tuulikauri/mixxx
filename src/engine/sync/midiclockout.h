@@ -1,5 +1,7 @@
 #pragma once
 #include <ableton/platforms/stl/Clock.hpp>
+#include "engine/sync/midiclockoutthread.h"
+
 
 #include <chrono>
 
@@ -228,6 +230,9 @@ class MidiClockOut : public QObject, public Syncable {
 
     Controller* m_pMidiClockOutController = nullptr; ///< Duplicate unowned pointer to the Controller that is linked to Midi Clock Out mapping       
 
+    std::unique_ptr<MidiClockOutThread> m_pMidiClockOutThread; ///< Thread for timing and Midi out
+
+
     //Debug 
     std::chrono::microseconds m_barLengthMeasured;
     std::chrono::microseconds m_barLengthError;
@@ -256,4 +261,5 @@ class MidiClockOut : public QObject, public Syncable {
     std::chrono::microseconds getHostTime() const;
     std::chrono::microseconds getHostTimeAtSpeaker(std::chrono::microseconds hostTime) const;    
 
+    friend class MidiClockOutThread;
     };

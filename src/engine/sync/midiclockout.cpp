@@ -107,9 +107,10 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
           mV_tickAdjustment(0),
 
           m_ticknsTimerID(Qt::TimerId::Invalid),
+          m_pMidiClockOutThread(std::make_unique<MidiClockOutThread>(this)),
           m_debugTickCounter(0),
           m_timingStyleThread(false),
-          m_midiStyleThread(false),
+          m_midiStyleThread(true),
           // GUI objects
           m_pMidiClockEnableButton(std::make_unique<ControlPushButton>(ConfigKey(group, "out_enabled"))),
           m_pMidiClockRestartButton(std::make_unique<ControlPushButton>(ConfigKey(group, "restart"))),
@@ -180,10 +181,13 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
     m_ticknsTimer.setParent(this);
     m_ticknsTimer.callOnTimeout(this, &MidiClockOut::tick);
     m_ticknsTimer.setSingleShot(true);
-        
-    //audioThreadDebugOutput();
+           
     m_timeReceivedNewBpm = mV_adjustedTimeReceivedNewBpm = std::chrono::steady_clock::now(); // this is temporary; ideally overwritten when m_enabled is updated       
         
+    if (m_timingStyleThread || m_midiStyleThread) {
+        m_pMidiClockOutThread->startMidiClockOutThread();
+    }
+    // audioThreadDebugOutput();
     qDebug() << "MidiClockOut::constructor() done";
 }
 
@@ -231,7 +235,13 @@ MidiClockOut::~MidiClockOut() {
                 &MidiClockOut::slotControlNudgeBack);
     }
 
-    // Destroy control objects before releasing Link.
+    // Destroy control objects before releasing MidiClockOut
+    m_pMidiClockOutThread->stopPlease();
+    qDebug() << "MidiClockOut::destructor: Asked MidiClockOutThread to stop";
+    qDebug() << "MidiClockOut::destructor: MidiClockOutThread resetting..";
+    //m_pMidiClockOutThread.reset(); // TODO(Tuuli): sometimes EngineMixer fails to exit, is this the bug?
+    qDebug() << "MidiClockOut::destroyed";
+
     m_pMidiClockEnableButton.reset();
     m_pMidiClockRestartButton.reset();
     m_pMidiClockTickButton.reset();
@@ -253,9 +263,11 @@ MidiClockOut::~MidiClockOut() {
 
 void MidiClockOut::setMidiClockOutController(Controller* pMidiClockOutController) {
     m_pMidiClockOutController = pMidiClockOutController;
+    m_pMidiClockOutThread->setMidiClockOutController(pMidiClockOutController);
 }
 void MidiClockOut::deleteMidiClockOutController() {
     m_pMidiClockOutController = nullptr;
+    m_pMidiClockOutThread->deleteMidiClockOutController();
 }
 
 // GUI Controls
@@ -506,7 +518,9 @@ bool MidiClockOut::sendDirectRTMidi(uint8_t status) {
         return false;
     }
 
-    if (m_pMidiClockOutController) {
+    if (m_midiStyleThread) {
+        return (m_pMidiClockOutThread->sendDirectRTMidi(status));
+    } else if (m_pMidiClockOutController) {
         if (m_pMidiClockOutController->isOpen()) {
             return (m_pMidiClockOutController->sendBytes(tickMessage));
         }

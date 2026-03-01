@@ -1338,6 +1338,7 @@ add_library(
   src/engine/sidechain/networkoutputstreamworker.cpp
   src/engine/sync/abletonlink.cpp
   src/engine/sync/midiclockout.cpp
+  src/engine/sync/midiclockoutthread.cpp
   src/engine/sync/enginesync.cpp
   src/engine/sync/internalclock.cpp
   src/engine/sync/synccontrol.cpp
