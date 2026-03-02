@@ -154,7 +154,8 @@ class MidiClockOut : public QObject, public Syncable {
     void clockContinue(double value, QObject* pSender);
     void clockStop(double value, QObject* pSender);
   
-  private slots:        
+  private slots:     
+    void slotDummy();
     void tick();    
 
     void slotControlOutEnabled(double controlButtonValue);

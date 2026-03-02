@@ -15,15 +15,22 @@
 namespace {
 const mixxx::Logger kLogger("MidiClockOutThread");
 constexpr std::chrono::microseconds kStartTickLength{(int)(2500000.0 / 120.0)};
+constexpr double kStartBeatSpeed{(120.0 / 60'000'000.0)};
 }
 
 MidiClockOutThread::MidiClockOutThread(MidiClockOut* parent) : 
           QThread(parent),
           m_pMidiClockOutParent(parent),
           stopplz(false),
-          m_midiFIFOQueue(512) {    
+          m_midiFIFOQueue(512),
+          m_beatSpeed(kStartBeatSpeed),
+          m_beatStartPos(0),
+          m_nextBeat(0),
+          m_beatClockRunning(false),
+          m_beatCount(0) {    
     this->setObjectName("MidiClockOutThread");    
     m_pMidiFIFOQueue = &m_midiFIFOQueue;
+    m_beatStartTime = std::chrono::steady_clock::now();
     qDebug() << "MidiClockOutThread::Created ";
 }
 MidiClockOutThread::~MidiClockOutThread() {
@@ -42,6 +49,29 @@ bool MidiClockOutThread::queueDirectRTMidi(uint8_t status) {
     const QMutexLocker locker(&midiMutex);
     if (m_pMidiFIFOQueue->write(&status, 1) == 1) {
         //qDebug() << "MidiClockOutThread::queueDirectRTMidi" << status;
+        return true;
+    }
+    return false;
+}
+bool MidiClockOutThread::queueDirectRTMidiMultiple(uint8_t status, int count) {
+    //const uint8_t arrayToWrite[count];
+    /*
+    std::array<uint8_t, 512> arrayToWrite;
+    if (count > 512) {
+        qWarning() << "MidiClockOutThread::queueDirectRTMidiMultiple : Tried to write " << count << "elements; 512 max";
+        count = 512;
+    }
+
+    //std::fill(arrayToWrite[0], arrayToWrite[count - 1], status);
+    arrayToWrite.fill(status);    
+    */
+    int written = 0;
+    const QMutexLocker locker(&midiMutex);
+    while (m_pMidiFIFOQueue->write(&status, 1) == 1 && (written < count) && (written < 300)) {
+        // qDebug() << "MidiClockOutThread::queueDirectRTMidi" << status;
+        written++;
+    }
+    if (written == (count - 1)) {
         return true;
     }
     return false;
@@ -91,19 +121,102 @@ void MidiClockOutThread::stopPlease() {
     mutex.unlock();
     wait();
 }
+void MidiClockOutThread::setBeatClockState(bool state) {
+    if (state) {
+        resetBeatTimerPos(std::chrono::steady_clock::now());
+    }
+    const QMutexLocker locker(&beatMutex);
+    m_beatClockRunning = state;
+}
+bool MidiClockOutThread::getBeatClockState() {
+    const QMutexLocker locker(&beatMutex);
+    return m_beatClockRunning;
+}
+
+double MidiClockOutThread::getBeatSpeedFromBpm(double bpm) {
+    return bpm / 60'000'000.0;
+}
+double MidiClockOutThread::getNextTickBeatDistance(double beatDistance) {
+    uint32_t ticksPassed = std::floor(beatDistance * 24.0);
+    return ((double)(ticksPassed+1) / 24.0);
+}
+double MidiClockOutThread::getPrevTickBeatDistance(double beatDistance) {
+    uint32_t ticksPassed = std::floor(beatDistance * 24.0);
+    return ((double)(ticksPassed) / 24.0);
+}
+int32_t MidiClockOutThread::getTicksBetween(double beatDistanceStart, double beatDistanceEnd) {
+    return (beatDistanceStart - beatDistanceEnd) * 24.0;
+}
+
+double MidiClockOutThread::getBeatDistanceAt(std::chrono::steady_clock::time_point time) {    
+    const QMutexLocker locker(&beatMutex);
+    return m_beatStartPos + m_beatSpeed * ((time - m_beatStartTime) / std::chrono::microseconds(1));
+}
+double MidiClockOutThread::setBeatTimerParameters(std::chrono::steady_clock::time_point startTime, double bpm) {
+    double beatSpeed = getBeatSpeedFromBpm(bpm);
+    double beatStartPos = getBeatDistanceAt(startTime); /// The previous beat location at that time stamp is now the starting beat location
+
+    const QMutexLocker locker(&beatMutex);
+    m_beatSpeed = beatSpeed;
+    m_beatStartTime = startTime;
+    m_beatStartPos = beatStartPos; /// Moving the start position to align to the new start time
+    return beatStartPos; /// Returns the previous location that beats are now counting from
+}
+double MidiClockOutThread::setBeatPosAtTime(std::chrono::steady_clock::time_point time, double beatPos, bool addExisting) {
+    int numBeats = 0;
+    double beatStartPos = getBeatDistanceAt(time);
+    if (addExisting) {
+        numBeats = std::floor(beatStartPos);
+    }
+
+    const QMutexLocker locker(&beatMutex);
+    m_beatStartPos = beatPos + numBeats; /// Add whole beats to avoid jumping the count
+    m_beatStartTime = time;
+    return (m_beatStartPos - beatStartPos); /// Returns how far the jump was and which direction, used to send sync ticks
+}
+double MidiClockOutThread::resetBeatTimerPos(std::chrono::steady_clock::time_point time) {    
+    double beatResetPos = getBeatDistanceAt(time); /// The previous beat location at that time stamp is now the starting beat location
+
+    const QMutexLocker locker(&beatMutex);    
+    m_beatStartTime = time;
+    m_beatStartPos = 0; /// Moving the start position to align to the new start time
+    m_beatCount = 0;
+    m_nextBeat = 0;
+    return beatResetPos; /// Returns the previous location that beats are now counting from
+}
+double MidiClockOutThread::syncAdjustment(std::chrono::steady_clock::time_point time, double syncShift) {
+    double beatResetPos = getBeatDistanceAt(time); /// The previous beat location at that time stamp is now the starting beat location
+
+    const QMutexLocker locker(&beatMutex);
+    m_beatStartTime = time;
+    m_beatStartPos = 0; /// Moving the start position to align to the new start time
+    m_beatCount = 0;
+    return beatResetPos; /// Returns the previous location that beats are now counting from
+}
+
 
 void MidiClockOutThread::run() {
     bool stopNow = false;
+
+    beatMutex.lock();
+    m_beatCount = 0; 
+    beatMutex.unlock();
+
+    m_nextBeat = 0;
+    std::chrono::time_point nowTime = std::chrono::steady_clock::now();
+
     while (!stopNow) {
+        // Midi
         midiMutex.lock();
         if (m_pMidiFIFOQueue->readAvailable()) { // DEBUG stops here instead of quitting?
             uint8_t data;
             if(m_pMidiFIFOQueue->read(&data, 1) == 1){
+                //TODO: handle skipping ticks for sync before unlocking midiMutex
                 midiMutex.unlock();
                 if (sendDirectRTMidi(data)) {
                     //qDebug() << "MidiClockOutThread::sendDirectRTMidi, sent " << data;
                 } else {
-                    qDebug() << "MidiClockOutThread::sendDirectRTMidi, failed to send " << data;
+                    qWarning() << "MidiClockOutThread::sendDirectRTMidi, failed to send " << data;
                 }
             } else {
                 qWarning() << "MidiClockOutThread, failed to read FIFO buffer but it has data ";
@@ -113,6 +226,23 @@ void MidiClockOutThread::run() {
             midiMutex.unlock();
         }
 
+        // Beat clock
+        nowTime = std::chrono::steady_clock::now();
+        auto currentBeatPos = getBeatDistanceAt(nowTime);
+        if (getBeatClockState()) {
+            //nextBeat = 0.5 * (beatCount+1); // 0.0416666666 beats per tick            
+            if (currentBeatPos > m_nextBeat) {
+                qDebug() << "TIME FOR SOME MORE OF THOSE SMASH-ROCKIN BEATS!";                                
+                if (!queueDirectRTMidi(0xFB)) {
+                    qWarning() << "Failed to queue";
+                }
+                emit tickSent();
+                beatMutex.lock();
+                m_beatCount++;
+                m_nextBeat = getNextTickBeatDistance(m_beatCount / 24.0);
+                beatMutex.unlock();
+            }
+        }
         usleep(200);
 
         mutex.lock();
@@ -120,6 +250,22 @@ void MidiClockOutThread::run() {
         mutex.unlock();
     }
 }
+/// 
+/// beatSpeed [ beats per us ] = bpm [b/min] * 1/60 [min/s] * 1/1,000,000 [s/us] = bpm / 60,000,000 [b/us]
+/// sync events : change the startPos
+/// tempo events : change the beatSpeed, at a specific startTime
+/// 
+/// beatPosTotal = startPos + beatSpeed * (time - startTime)
+/// nextBeat = 2
+/// if (beatPosTotal > nextBeat){
+///     tick();
+///     nextBeat++;
+/// }
+/// 
+/// void MidiClockOutThread::setBeatTimerParameters(std::chrono::steady_clock::time_point startTime, double bpm);
+/// double MidiClockOutThread::getBeatDistance();
+/// void MidiClockOutThread::setPosAtTime(std::chrono::steady_clock::time_point time, double beatPos);
+/// 
 
 
 /// OLDDDDDDDDDDDDDDD ////////////////////////////////////////////////

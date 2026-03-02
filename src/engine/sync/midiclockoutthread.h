@@ -56,10 +56,25 @@ public:
     void stopPlease();
     void startMidiClockOutThread();
 
+    // Midi
     bool queueDirectRTMidi(uint8_t status); ///< Adds status to the queue of MIDI data to send
+    bool queueDirectRTMidiMultiple(uint8_t status, int count);
     bool sendDirectRTMidi(uint8_t status);  ///< Sends the next byte of MIDI data and removes it from midiFIFOQueue
     void setMidiClockOutController(Controller* pMidiClockOutController);
     void deleteMidiClockOutController();
+
+    // Beat clock
+    double getBeatSpeedFromBpm(double bpm);
+    double getBeatDistanceAt(std::chrono::steady_clock::time_point time);
+    double setBeatTimerParameters(std::chrono::steady_clock::time_point startTime, double bpm);
+    double setBeatPosAtTime(std::chrono::steady_clock::time_point time, double beatPos, bool addExisting = true);
+    void setBeatClockState(bool state);
+    bool getBeatClockState();
+    double getNextTickBeatDistance(double beatDistance);
+    double getPrevTickBeatDistance(double beatDistance);
+    int32_t getTicksBetween(double beatDistanceStart, double beatDistanceEnd);
+    double resetBeatTimerPos(std::chrono::steady_clock::time_point time);
+    double syncAdjustment(std::chrono::steady_clock::time_point time, double syncShift);   
 
     void run() override;
 
@@ -87,24 +102,34 @@ public:
 
     void run() override;
     
-    
+   */ 
 signals:
-    void tickSent();
-    */
+    void tickSent();    
 
 //public slots:
     // None; the timer is edited directly, with a Mutex lock for the cross-threading.
 private:
+    QMutex mutex;
+    QWaitCondition cond;
+    MidiClockOut* m_pMidiClockOutParent;
+    bool stopplz;
+
+    //Midi
     QMutex midiMutex;
     FIFO<uint8_t>* m_pMidiFIFOQueue; 
     FIFO<uint8_t> m_midiFIFOQueue;
-
-    QMutex mutex;
-    QWaitCondition cond;    
-    MidiClockOut *m_pMidiClockOutParent;
-    bool stopplz;
-
     Controller* m_pMidiClockOutController = nullptr; ///< Duplicate unowned pointer to the Controller that is linked to Midi Clock Out mapping
+
+    // Beat clock
+    QMutex beatMutex;
+    double m_beatSpeed;
+    double m_beatStartPos;
+    double m_nextBeat;
+    std::chrono::steady_clock::time_point m_beatStartTime;
+    bool m_beatClockRunning;
+    int32_t m_beatCount;
+
+
     
     /*
     * OLDDDDDDDDDDDDDDDDDDDDDDDDDDDD

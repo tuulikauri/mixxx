@@ -179,13 +179,14 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
         qDebug() << "MidiClockOut::constructor(): Qt<6.8, using QTimer; millisecond resolution only";
 #endif
     m_ticknsTimer.setParent(this);
-    m_ticknsTimer.callOnTimeout(this, &MidiClockOut::tick);
+    m_ticknsTimer.callOnTimeout(this, &MidiClockOut::slotDummy);
     m_ticknsTimer.setSingleShot(true);
            
     m_timeReceivedNewBpm = mV_adjustedTimeReceivedNewBpm = std::chrono::steady_clock::now(); // this is temporary; ideally overwritten when m_enabled is updated       
         
     if (m_timingStyleThread || m_midiStyleThread) {
         m_pMidiClockOutThread->startMidiClockOutThread();
+        QObject::connect(m_pMidiClockOutThread.get(), &MidiClockOutThread::tickSent, this, &MidiClockOut::tick);
     }
     // audioThreadDebugOutput();
     qDebug() << "MidiClockOut::constructor() done";
@@ -260,6 +261,9 @@ MidiClockOut::~MidiClockOut() {
     //Destroy pointer safely
     deleteMidiClockOutController();
 }
+void MidiClockOut::slotDummy() {
+    qDebug() << "MidiClockOut::slotDummy";
+}
 
 void MidiClockOut::setMidiClockOutController(Controller* pMidiClockOutController) {
     m_pMidiClockOutController = pMidiClockOutController;
@@ -278,7 +282,8 @@ void MidiClockOut::slotControlOutEnabled(double controlButtonValue) {
     
     qDebug() << "MidiClockOut::slotControlOutEnabled():" << controlButtonValue;
     m_enabled = (controlButtonValue > 0);
-        
+    m_pMidiClockOutThread->setBeatClockState(m_enabled);
+
     if (m_enabled) {  
         sendMidiClockStart();
 
@@ -397,6 +402,8 @@ void MidiClockOut::updateLeaderBeatDistance(double beatDistance) {
     auto tickSyncOffset = (int32_t)(beatDistance * 24) - ((int32_t)m_tickCount % 24); // TODO(Tuuli): do we want sequencers to keep playing in place, and catch up?
     resetQueuedSyncTicks();
     adjustSyncTicks(tickSyncOffset);
+
+    auto threadSyncOffset = m_pMidiClockOutThread->setBeatPosAtTime(m_timeReceivedBeatDistance, beatDistance);
 }
 
 void MidiClockOut::forceUpdateLeaderBeatDistance(double beatDistance) {
@@ -447,7 +454,7 @@ std::chrono::microseconds MidiClockOut::tickLengthFromBpm(double bpm) {
     // 2500000 / bpm   
     DEBUG_ASSERT(bpm >= 0);
     qDebug() << "MidiClockOut::tickLengthFromBpm(), bpm:" << bpm;
-    std::chrono::microseconds conversion{(int)(2500000.0 / bpm)};
+    std::chrono::microseconds conversion{(int)(2'500'000.0 / bpm)};
     return conversion;
 }
 
@@ -455,6 +462,7 @@ void MidiClockOut::restart() {
     qDebug() << "MidiClockOut::restart(), enabled: " << m_enabled;
 
     mV_adjustedTimeReceivedNewBpm = std::chrono::steady_clock::now();
+    auto beatResetPos = m_pMidiClockOutThread->resetBeatTimerPos(mV_adjustedTimeReceivedNewBpm);
 
     sendMidiClockStop();
     if (m_enabled) {        
@@ -580,6 +588,9 @@ void MidiClockOut::handleNewBPM(mixxx::Bpm newBpm) {
         return;
     }    
     qDebug() << "MidiClockOut::tick():handleNewBPM" << newBpm;
+    
+    auto beatPos = m_pMidiClockOutThread->setBeatTimerParameters(timeNow, newBpm.value());
+
     m_newTickLength = tickLengthFromBpm(newBpm.value());        
     m_currentBpm = newBpm;
     if (m_enabled) {
