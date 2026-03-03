@@ -238,10 +238,7 @@ MidiClockOut::~MidiClockOut() {
 
     // Destroy control objects before releasing MidiClockOut
     m_pMidiClockOutThread->stopPlease();
-    qDebug() << "MidiClockOut::destructor: Asked MidiClockOutThread to stop";
-    qDebug() << "MidiClockOut::destructor: MidiClockOutThread resetting..";
-    //m_pMidiClockOutThread.reset(); // TODO(Tuuli): sometimes EngineMixer fails to exit, is this the bug?
-    qDebug() << "MidiClockOut::destroyed";
+    qDebug() << "MidiClockOut::destructor: Asked MidiClockOutThread to stop";   
 
     m_pMidiClockEnableButton.reset();
     m_pMidiClockRestartButton.reset();
@@ -260,6 +257,8 @@ MidiClockOut::~MidiClockOut() {
 
     //Destroy pointer safely
     deleteMidiClockOutController();
+
+    qDebug() << "MidiClockOut::destroyed";
 }
 void MidiClockOut::slotDummy() {
     qDebug() << "MidiClockOut::slotDummy";

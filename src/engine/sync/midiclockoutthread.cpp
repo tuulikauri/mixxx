@@ -217,6 +217,9 @@ int16_t MidiClockOutThread::resetPendingSyncAdjustment() {
 }
 int16_t MidiClockOutThread::getPendingSyncAdjustment() {
     const QMutexLocker locker(&beatMutex);    
+    if (m_tickSyncAdjustment != 0) {
+        qDebug() << "MidiClockOutThread, Sync ticks: " << m_tickSyncAdjustment;
+    }
     return m_tickSyncAdjustment;    
 }
 
@@ -239,8 +242,8 @@ void MidiClockOutThread::run() {
                 qWarning() << "Failed to queue extra tick";
             } else {
                 addPendingSyncAdjustment((int16_t)(-1));
+                qDebug() << "MidiClockOutThread, Queued extra tick ";
             }
-            qDebug() << "MidiClockOutThread, Queued extra tick ";
         }
 
         // Midi
@@ -264,8 +267,7 @@ void MidiClockOutThread::run() {
                 }
             } else {
                 midiMutex.unlock();
-                qWarning() << "MidiClockOutThread, failed to read FIFO buffer but it has data ";
-                
+                qWarning() << "MidiClockOutThread, failed to read FIFO buffer but it has data ";                
             }
         } else {
             midiMutex.unlock();
