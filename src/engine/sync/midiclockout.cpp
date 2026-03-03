@@ -109,7 +109,7 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
           m_ticknsTimerID(Qt::TimerId::Invalid),
           m_pMidiClockOutThread(std::make_unique<MidiClockOutThread>(this)),
           m_debugTickCounter(0),
-          m_timingStyleThread(false),
+          m_timingStyleThread(true),
           m_midiStyleThread(true),
           // GUI objects
           m_pMidiClockEnableButton(std::make_unique<ControlPushButton>(ConfigKey(group, "out_enabled"))),
@@ -186,7 +186,7 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
         
     if (m_timingStyleThread || m_midiStyleThread) {
         m_pMidiClockOutThread->startMidiClockOutThread();
-        QObject::connect(m_pMidiClockOutThread.get(), &MidiClockOutThread::tickSent, this, &MidiClockOut::tick);
+        QObject::connect(m_pMidiClockOutThread.get(), &MidiClockOutThread::tickSent, this, &MidiClockOut::tickGui);
     }
     // audioThreadDebugOutput();
     qDebug() << "MidiClockOut::constructor() done";
@@ -323,7 +323,8 @@ void MidiClockOut::slotControlRestart(double controlButtonValue) {
 void MidiClockOut::slotControlTick(double controlButtonValue) {
     Q_UNUSED(controlButtonValue)
     qDebug() << "MidiClockOut::slotControlTick";            
-    tick();
+    //tick();
+    sendMidiClockTick();
 }
 
 void MidiClockOut::slotControlNudgeFwd(double controlButtonValue) {
@@ -403,7 +404,9 @@ void MidiClockOut::updateLeaderBeatDistance(double beatDistance) {
     resetQueuedSyncTicks();
     adjustSyncTicks(tickSyncOffset);
 
-    auto threadSyncOffset = m_pMidiClockOutThread->setBeatPosAtTime(m_timeReceivedBeatDistance, beatDistance);
+    /// When the leader moves the beatDistance, follow and queue up a tickSyncAdjustment
+    auto threadSyncOffset = m_pMidiClockOutThread->setBeatPosAt(m_timeReceivedBeatDistance, beatDistance);
+    m_pMidiClockOutThread->addPendingSyncAdjustment(threadSyncOffset); //TODO(Tuuli) Add a sync-follow setting
 }
 
 void MidiClockOut::forceUpdateLeaderBeatDistance(double beatDistance) {
@@ -462,7 +465,7 @@ void MidiClockOut::restart() {
     qDebug() << "MidiClockOut::restart(), enabled: " << m_enabled;
 
     mV_adjustedTimeReceivedNewBpm = std::chrono::steady_clock::now();
-    auto beatResetPos = m_pMidiClockOutThread->resetBeatTimerPos(mV_adjustedTimeReceivedNewBpm);
+    auto beatResetPos = m_pMidiClockOutThread->resetBeatPosAt(mV_adjustedTimeReceivedNewBpm);
 
     sendMidiClockStop();
     if (m_enabled) {        
@@ -482,11 +485,15 @@ void MidiClockOut::restart() {
     m_tickCount = 0;
     mV_ticksSinceBpmChange = 0;      
     resetQueuedSyncTicks();
-    
-    m_sixteenths = 1;
-    m_beats = 1;     
-    m_bars = 1;    
     mflag_bpmChangedThisBar = false;
+
+    resetGui();
+}
+
+void MidiClockOut::resetGui() {
+    m_sixteenths = 1;
+    m_beats = 1;
+    m_bars = 1;    
 
     m_pMidiClockPosSixteenths->forceSet(m_sixteenths);
     m_pMidiClockPosBeats->forceSet(m_beats);
@@ -589,7 +596,7 @@ void MidiClockOut::handleNewBPM(mixxx::Bpm newBpm) {
     }    
     qDebug() << "MidiClockOut::tick():handleNewBPM" << newBpm;
     
-    auto beatPos = m_pMidiClockOutThread->setBeatTimerParameters(timeNow, newBpm.value());
+    auto beatPos = m_pMidiClockOutThread->setBeatTempoAt(timeNow, newBpm.value());
 
     m_newTickLength = tickLengthFromBpm(newBpm.value());        
     m_currentBpm = newBpm;
@@ -676,9 +683,13 @@ void MidiClockOut::tick() {
     }
 
     sendMidiClockTick();
-    
+
+    tickGui(syncTicks);
+}
+
+void MidiClockOut::tickGui(int32_t syncTicks) {
     bool updateNeeded = false;
-    while (syncTicks >= 0) {   
+    while (syncTicks >= 0) {
         m_tickCount++;
         if ((m_tickCount % 6) == 0) {
             m_sixteenths++;
@@ -689,22 +700,27 @@ void MidiClockOut::tick() {
                 if (((m_beats - 1) % 4) == 0) {
                     m_beats = 1;
                     m_bars++;
-                    //debugBarTime();
+                    // debugBarTime();
                 }
             }
-        updateNeeded = true;
+            updateNeeded = true;
         }
-    syncTicks--;
+        syncTicks--;
     }
 
     if (updateNeeded) {
         m_pMidiClockPosSixteenths->forceSet(m_sixteenths);
         m_pMidiClockPosBeats->forceSet(m_beats);
         m_pMidiClockPosBars->forceSet(m_bars);
-    }    
+    }
 }
 
 void MidiClockOut::fwdSixteenth() {
+    if (m_timingStyleThread) {
+        m_pMidiClockOutThread->addPendingSyncAdjustment((int16_t)6);
+        return;
+    }
+
     m_tickCount+=6;
     
     adjustSyncTicks(6);
@@ -727,6 +743,11 @@ void MidiClockOut::fwdSixteenth() {
 }
 
 void MidiClockOut::backSixteenth() {
+    if (m_timingStyleThread) {
+        m_pMidiClockOutThread->addPendingSyncAdjustment((int16_t)(-6));
+        return;
+    }
+
     if (m_tickCount >= 6) {
         adjustSyncTicks(-6);
 

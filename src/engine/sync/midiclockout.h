@@ -157,6 +157,7 @@ class MidiClockOut : public QObject, public Syncable {
   private slots:     
     void slotDummy();
     void tick();    
+    void tickGui(int32_t syncTicks); ///< Advances the bars:beats:sixteenths syncTicks+1 times forward in the GUI. Should be used to match the beat position of an external sequencer. Should not tick for skipped or failed ticks, only when a tick is sent to external sequencers.
 
     void slotControlOutEnabled(double controlButtonValue);
     void slotControlRestart(double controlButtonValue);
@@ -214,6 +215,7 @@ class MidiClockOut : public QObject, public Syncable {
     
     //Sync
     void restart(); ///< Restart all tick counters, all bpm adjusters, and the tick clock (if its running)
+    void resetGui(); ///< Resets the GUI sixteenths, beats, bars to 1,1,1
     void backSixteenth(); ///< Move external device back 6 ticks
     void fwdSixteenth(); ///< Move external device forward 6 ticks
 

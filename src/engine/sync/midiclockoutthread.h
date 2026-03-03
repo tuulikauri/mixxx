@@ -58,23 +58,33 @@ public:
 
     // Midi
     bool queueDirectRTMidi(uint8_t status); ///< Adds status to the queue of MIDI data to send
-    bool queueDirectRTMidiMultiple(uint8_t status, int count);
-    bool sendDirectRTMidi(uint8_t status);  ///< Sends the next byte of MIDI data and removes it from midiFIFOQueue
+    bool queueDirectRTMidiMultiple(uint8_t status, int count); ///< Adds status to the queue of MIDI data to send, count times
+    bool sendDirectRTMidi(uint8_t status); ///< Sends the next byte of MIDI data and removes it from midiFIFOQueue
     void setMidiClockOutController(Controller* pMidiClockOutController);
     void deleteMidiClockOutController();
 
     // Beat clock
-    double getBeatSpeedFromBpm(double bpm);
-    double getBeatDistanceAt(std::chrono::steady_clock::time_point time);
-    double setBeatTimerParameters(std::chrono::steady_clock::time_point startTime, double bpm);
-    double setBeatPosAtTime(std::chrono::steady_clock::time_point time, double beatPos, bool addExisting = true);
-    void setBeatClockState(bool state);
+
+    double getBeatSpeedFromBpm(double bpm); ///< Utility function to convert bpm to beats per microsecond
+    int32_t getTicksFromBeatPos(double beatPosition); ///< Utility function to convert a beatPosition to ticks; does not consider the current beat clock, only the size of beatPosition
+    int32_t getTicksBetween(double beatPositionStart, double beatPositionEnd); ///< Utility function to convert a twoo beatPositions to ticks; does not consider the current beat clock, only the size of beatPositions
+    double getNextTickBeatPos(double beatPosition); ///< Utility function to determine the next following 24PPQN position. If the position is on a tick, returns the next 24 PPQN tick
+    double getPrevTickBeatPos(double beatPosition); ///< Utility function to determine the previous 24PPQN position. If the position is on a tick, returns the tick and not the previous 24 PPQN tick // TODO(Tuuli): Does this make sense to round this way?    
+
+    void setBeatClockState(bool state); ///< Enables and disables the clock in run()
     bool getBeatClockState();
-    double getNextTickBeatDistance(double beatDistance);
-    double getPrevTickBeatDistance(double beatDistance);
-    int32_t getTicksBetween(double beatDistanceStart, double beatDistanceEnd);
-    double resetBeatTimerPos(std::chrono::steady_clock::time_point time);
-    double syncAdjustment(std::chrono::steady_clock::time_point time, double syncShift);   
+    
+    double getBeatPosAt(std::chrono::steady_clock::time_point time); ///< Uses the current beat tempo and position; each integer part is a full beat (24 ticks) at the current tempo. Note that mixxx's beatDistance is usually only with respect to the previous beat and never more than 1; this is named beatPosition to distinguish it
+    double setBeatTempoAt(std::chrono::steady_clock::time_point startTime, double bpm); ///< Returns the beat position at startTime
+    double setBeatPosAt(std::chrono::steady_clock::time_point time, double beatPos, bool addExisting = true); ///< Moves the start position and start time. Preserves whole beats in the beat position by default. Returns how far the jump was to allow sync shifts            
+    double resetBeatPosAt(std::chrono::steady_clock::time_point time);
+    
+    double getNextBeat(); ///< 
+
+    int16_t getPendingSyncAdjustment(); ///< Negative = skip ticks (slower); positive = extra ticks (faster)
+    void addPendingSyncAdjustment(double syncShift);
+    void addPendingSyncAdjustment(int16_t syncShift);
+    int16_t resetPendingSyncAdjustment(); ///< Clears any pending sync tick edits (extra ticks, or skip-ticks); returns the amount removed
 
     void run() override;
 
@@ -104,7 +114,7 @@ public:
     
    */ 
 signals:
-    void tickSent();    
+    void tickSent(int32_t syncTicks); ///< Emitted to change the GUI. Advances the bars:beats:sixteenths syncTicks+1 times forward. Should not tick for skipped or failed ticks, so only emit when a tick is sent to external sequencers.
 
 //public slots:
     // None; the timer is edited directly, with a Mutex lock for the cross-threading.
@@ -124,11 +134,11 @@ private:
     QMutex beatMutex;
     double m_beatSpeed;
     double m_beatStartPos;
-    double m_nextBeat;
+    double m_nextBeatPos;
     std::chrono::steady_clock::time_point m_beatStartTime;
     bool m_beatClockRunning;
-    int32_t m_beatCount;
-
+    int32_t m_tickCount; ///< Counts how many ticks have occurred based on time ONLY. This is for calculating the clock position; it ticks before the message is sent, and does not capture additional or skipped sync ticks (handled by m_tickSyncAdjustment)
+    int16_t m_tickSyncAdjustment; ///< Queued ticks to skip or add to queue as extra; negative = skip ticks (slower); positive = extra ticks (faster)
 
     
     /*
