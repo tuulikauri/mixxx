@@ -391,7 +391,7 @@ mixxx::Bpm MidiClockOut::getBaseBpm() const {
 }
 
 void MidiClockOut::updateLeaderBeatDistance(double beatDistance) {    
-    qDebug() << "MidiClockOut::updateLeaderBeatDistance()";
+    qDebug() << "MidiClockOut::updateLeaderBeatDistance()" << beatDistance;
     // TODO(Tuuli) add a setting or control for toggling following sync changes
     // TODO(Tuuli) We dont store the desired offset between the tick position, and the music's beatDistance; need to get the live Leader_beatDistance at the time of a GUI enable or restart command
     // TODO(Tuuli) This info is only stored for now
@@ -403,9 +403,11 @@ void MidiClockOut::updateLeaderBeatDistance(double beatDistance) {
     resetQueuedSyncTicks();
     adjustSyncTicks(tickSyncOffset);
 
-    /// When the leader moves the beatDistance, follow and queue up a tickSyncAdjustment
-    auto threadSyncOffset = m_pMidiClockOutThread->setBeatPosAt(m_timeReceivedBeatDistance, beatDistance);
-    m_pMidiClockOutThread->addPendingSyncAdjustment(threadSyncOffset); //TODO(Tuuli) Add a sync-follow setting
+    /// When the leader moves the beatDistance, follow and queue up a tickSyncAdjustment if the clock is enabled
+    if (m_enabled) {
+        auto threadSyncOffset = m_pMidiClockOutThread->setBeatPosAt(m_timeReceivedBeatDistance, beatDistance);
+        m_pMidiClockOutThread->addPendingSyncAdjustment(threadSyncOffset); // TODO(Tuuli) Add a sync-follow setting
+    }
 }
 
 void MidiClockOut::forceUpdateLeaderBeatDistance(double beatDistance) {

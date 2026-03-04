@@ -23,10 +23,10 @@ MidiClockOutThread::MidiClockOutThread(MidiClockOut* parent) :
           m_pMidiClockOutParent(parent),
           stopplz(false),
           m_midiFIFOQueue(512),
+          m_beatClockRunning(false),
           m_beatSpeed(kStartBeatSpeed),
           m_beatStartPos(0),
-          m_nextBeatPos(0),
-          m_beatClockRunning(false),
+          m_nextBeatPos(0),    
           m_tickCount(0),
           m_tickSyncAdjustment(0) {    
     this->setObjectName("MidiClockOutThread");    
@@ -44,8 +44,37 @@ MidiClockOutThread::~MidiClockOutThread() {
     wait();   
     qDebug() << "MidiClockOutThread::done ";
 }
+void MidiClockOutThread::startMidiClockOutThread() {
+    QMutexLocker locker(&mutex);
+    if (!isRunning()) {
+        // m_startTime = std::chrono::steady_clock::now();
+        start(QThread::HighestPriority);
+    } else
+        cond.wakeOne();
+    qDebug() << "MidiClockOutThread::startMidiClockOutThread";
+}
+void MidiClockOutThread::stopPlease() {
+    mutex.lock();
+    stopplz = true;
+    mutex.unlock();
+    wait();
+}
+void MidiClockOutThread::testuSleepLength() {
+    auto startTime = std::chrono::steady_clock::now();
+    uint32_t ticks = 0;
+    bool stopNow = false;
+    while (!stopNow && ticks < 5000) {
+        ticks++;
+        usleep(200);
 
-// Adds status to the queue of MIDI data to send
+        mutex.lock();
+        stopNow = stopplz;
+        mutex.unlock();
+    }
+    auto endTime = std::chrono::steady_clock::now();
+    qDebug() << "MidiClockOutThread::testuSleepLength (5000*0.2ms = 10s) " << std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+}
+
 bool MidiClockOutThread::queueDirectRTMidi(uint8_t status) {
     const QMutexLocker locker(&midiMutex);
     if (m_pMidiFIFOQueue->write(&status, 1) == 1) {
@@ -54,30 +83,18 @@ bool MidiClockOutThread::queueDirectRTMidi(uint8_t status) {
     }
     return false;
 }
-bool MidiClockOutThread::queueDirectRTMidiMultiple(uint8_t status, int count) {
-    //const uint8_t arrayToWrite[count];
-    /*
-    std::array<uint8_t, 512> arrayToWrite;
-    if (count > 512) {
-        qWarning() << "MidiClockOutThread::queueDirectRTMidiMultiple : Tried to write " << count << "elements; 512 max";
-        count = 512;
-    }
-
-    //std::fill(arrayToWrite[0], arrayToWrite[count - 1], status);
-    arrayToWrite.fill(status);    
-    */
-    int written = 0;
+uint16_t MidiClockOutThread::queueDirectRTMidiMultiple(uint8_t status, int count) {
+    uint16_t written = 0;
     const QMutexLocker locker(&midiMutex);
-    while (m_pMidiFIFOQueue->write(&status, 1) == 1 && (written < count) && (written < 300)) {
-        // qDebug() << "MidiClockOutThread::queueDirectRTMidi" << status;
+    while (m_pMidiFIFOQueue->write(&status, 1) == 1 && (written < count) && (written < 288)) {
+        // qDebug() << "MidiClockOutThread::queueDirectRTMidiMultiple, queued " << status;
         written++;
     }
     if (written == (count - 1)) {
-        return true;
+        return 0;
     }
-    return false;
+    return written;
 }
-// Sends MIDI data
 bool MidiClockOutThread::sendDirectRTMidi(uint8_t status) {    
     QByteArray midiRTMessage;    
     if (status == (uint8_t)0xF8) {
@@ -94,7 +111,7 @@ bool MidiClockOutThread::sendDirectRTMidi(uint8_t status) {
 
     if (m_pMidiClockOutController) {
         if (m_pMidiClockOutController->isOpen()) {
-            return (m_pMidiClockOutController->sendBytes(midiRTMessage));
+            return (m_pMidiClockOutController->sendBytes(midiRTMessage)); //TODO(Tuuli) Eventually calls portmidi.h::Pm_WriteShort(m_pStream, 0, message) - is this blocking?
         }
     }
     //qDebug() << "MidiClockOutThread::sendDirectRTMidi, sent " << status;
@@ -107,21 +124,6 @@ void MidiClockOutThread::deleteMidiClockOutController() {
     m_pMidiClockOutController = nullptr;
 }
 
-void MidiClockOutThread::startMidiClockOutThread() {
-    QMutexLocker locker(&mutex);
-    if (!isRunning()) {
-        // m_startTime = std::chrono::steady_clock::now();
-        start(QThread::HighestPriority);
-    } else
-        cond.wakeOne();
-    qDebug() << "MidiClockOutThread::startMidiClockOutThread";
-}
-void MidiClockOutThread::stopPlease() {
-    mutex.lock();
-    stopplz = true;
-    mutex.unlock();
-    wait();
-}
 void MidiClockOutThread::setBeatClockState(bool state) {
     if (state) {
         resetBeatPosAt(std::chrono::steady_clock::now());
@@ -134,21 +136,21 @@ bool MidiClockOutThread::getBeatClockState() {
     return m_beatClockRunning;
 }
 
-double MidiClockOutThread::getBeatSpeedFromBpm(double bpm) {
+double MidiClockOutThread::calcBeatSpeedFromBpm(double bpm) {
     return bpm / 60'000'000.0;
 }
-double MidiClockOutThread::getNextTickBeatPos(double beatPosition) {
+double MidiClockOutThread::calcNextTickBeatPos(double beatPosition) {
     uint32_t ticksPassed = std::floor(beatPosition * 24.0);
     return ((double)(ticksPassed+1) / 24.0);
 }
-double MidiClockOutThread::getPrevTickBeatPos(double beatPosition) {
+double MidiClockOutThread::calcPrevTickBeatPos(double beatPosition) {
     uint32_t ticksPassed = std::floor(beatPosition * 24.0);
     return ((double)(ticksPassed) / 24.0);
 }
-int32_t MidiClockOutThread::getTicksBetween(double beatPositionStart, double beatPositionEnd) {
+int32_t MidiClockOutThread::calcTicksBetween(double beatPositionStart, double beatPositionEnd) {
     return std::floor((beatPositionEnd - beatPositionStart) * 24.0); // TODO(Tuuli): Does floor make sense? Might be a negative number. How do we want it rounded? Towards zero? Up/down?
 }
-int32_t MidiClockOutThread::getTicksFromBeatPos(double beatPosition) {
+int32_t MidiClockOutThread::calcTicksFromBeatPos(double beatPosition) {
     return std::floor(beatPosition * 24.0); // TODO(Tuuli): Does floor make sense? Might be a negative number. How do we want it rounded? Towards zero? Up/down?
 }
 
@@ -157,28 +159,53 @@ double MidiClockOutThread::getBeatPosAt(std::chrono::steady_clock::time_point ti
     return m_beatStartPos + m_beatSpeed * ((time - m_beatStartTime) / std::chrono::microseconds(1));
 }
 double MidiClockOutThread::setBeatTempoAt(std::chrono::steady_clock::time_point startTime, double bpm) {
-    double beatSpeed = getBeatSpeedFromBpm(bpm);
-    double beatStartPos = getBeatPosAt(startTime); /// The previous beat location at that time stamp is now the starting beat location
-
+    double beatSpeed = calcBeatSpeedFromBpm(bpm);
+    double beatStartPos = getBeatPosAt(startTime); /// The previous beat location at that time stamp is now the starting beat position for the new speed, with the new start time
+    auto currentPos = getBeatPosAt(std::chrono::steady_clock::now());
+    auto nextBeat = calcNextTickBeatPos(currentPos);
+    
     const QMutexLocker locker(&beatMutex);
     m_beatSpeed = beatSpeed;
     m_beatStartTime = startTime;
-    m_beatStartPos = beatStartPos; /// Moving the start position to align to the new start time
-    return beatStartPos; /// Returns the previous location that beats are now counting from
+    m_beatStartPos = beatStartPos;
+    m_nextBeatPos = nextBeat;
+    m_tickCount = std::floor(currentPos * 24.0);
+    return beatStartPos;
 }
 double MidiClockOutThread::setBeatPosAt(std::chrono::steady_clock::time_point time, double beatPos, bool addExisting) {
     int numBeats = 0;
     double beatStartPos = getBeatPosAt(time);
     if (addExisting) {
         numBeats = std::floor(beatStartPos);
-    } else {
-        // TODO(Tuuli): move m_tickCount and m_nextBeatPos to align with the new position. 
-    }    
+    } 
+    
+    auto newStart = beatPos + numBeats; /// Add whole beats to avoid jumping the count
+    // next beat is the next one from now(), not from time - this is wrong probably...
+    auto timeNow = std::chrono::steady_clock::now();
+    auto currentPos = getBeatPosAt(timeNow);
+    auto nextBeat = calcNextTickBeatPos(currentPos); //in the old beatPos
+
+
+
+    //auto newCurrentPos = getBeatPosAt(std::chrono::steady_clock::now());
+    //auto newCurrentPos = m_beatStartPos + m_beatSpeed * ((time - m_beatStartTime) / std::chrono::microseconds(1));
+    //auto newCurrentPos = newStart + m_beatSpeed * ((timeNow - time) / std::chrono::microseconds(1));
+    //auto newNextBeat = calcNextTickBeatPos(newCurrentPos);
+
+    //in the previous run() loop.. before jumping
+    //m_nextBeatPos = calcNextTickBeatPos(m_tickCount / 24.0);
+    //m_tickCount++;
 
     const QMutexLocker locker(&beatMutex);
-    m_beatStartPos = beatPos + numBeats; /// Add whole beats to avoid jumping the count
+    m_beatStartPos = newStart; 
     m_beatStartTime = time;
-    return (m_beatStartPos - beatStartPos); /// Returns how far the jump was and which direction, used to send sync ticks
+    ////m_nextBeatPos = nextBeat;
+    ////m_tickCount = std::floor(currentPos * 24.0);
+    auto newCurrentPos = newStart + m_beatSpeed * ((timeNow - time) / std::chrono::microseconds(1));
+    m_nextBeatPos = calcNextTickBeatPos(newCurrentPos);
+    m_tickCount = std::floor(newCurrentPos * 24.0);
+    
+    return (m_beatStartPos - beatStartPos);
     //beatPos - (beatStartPos - floor(beatStartPos))
 }
 double MidiClockOutThread::resetBeatPosAt(std::chrono::steady_clock::time_point time) {    
@@ -189,25 +216,23 @@ double MidiClockOutThread::resetBeatPosAt(std::chrono::steady_clock::time_point 
     m_beatStartPos = 0; 
     m_tickCount = 0;
     m_nextBeatPos = 0;
-    return beatResetPos; /// Returns the previous beat position for that time, before reset
+    return beatResetPos;
 }
-double MidiClockOutThread::getNextBeat() {
+double MidiClockOutThread::getNextBeatPos() {
     const QMutexLocker locker(&beatMutex);    
     return m_nextBeatPos;
 }
 
-void MidiClockOutThread::addPendingSyncAdjustment(double syncShift) {        
-    qDebug() << "MidiClockOutThread::addPendingSyncAdjustment(double) " << syncShift;    
-
-    const QMutexLocker locker(&beatMutex);
-    //TODO(Tuuli): Should this accept arbitrarily large shift requests? Or limit to 2 bars? (192 ticks)
-    m_tickSyncAdjustment += getTicksFromBeatPos(syncShift);     
-}
 void MidiClockOutThread::addPendingSyncAdjustment(int16_t syncShift) {
-    qDebug() << "MidiClockOutThread::addPendingSyncAdjustment(int) " << syncShift;
+    qDebug() << "MidiClockOutThread::addPendingSyncAdjustment(int) " << syncShift;      
+    const QMutexLocker locker(&beatMutex);        
+    m_tickSyncAdjustment = (m_tickSyncAdjustment + syncShift) % 288; /// Limits the pending sync range to 12 beats (3 bars at 4/4, 4 bars at 3/4) (288 ticks)
+}
+void MidiClockOutThread::addPendingSyncAdjustment(double syncShift) {
+    qDebug() << "MidiClockOutThread::addPendingSyncAdjustment(double) " << syncShift;
 
     const QMutexLocker locker(&beatMutex);
-    m_tickSyncAdjustment += syncShift;    
+    m_tickSyncAdjustment = (m_tickSyncAdjustment + calcTicksFromBeatPos(syncShift)) % 288;
 }
 int16_t MidiClockOutThread::resetPendingSyncAdjustment() {    
     const QMutexLocker locker(&beatMutex);
@@ -217,9 +242,9 @@ int16_t MidiClockOutThread::resetPendingSyncAdjustment() {
 }
 int16_t MidiClockOutThread::getPendingSyncAdjustment() {
     const QMutexLocker locker(&beatMutex);    
-    if (m_tickSyncAdjustment != 0) {
-        qDebug() << "MidiClockOutThread, Sync ticks: " << m_tickSyncAdjustment;
-    }
+    //if (m_tickSyncAdjustment != 0) {
+    //    qDebug() << "MidiClockOutThread, Sync ticks: " << m_tickSyncAdjustment;
+    //}
     return m_tickSyncAdjustment;    
 }
 
@@ -236,8 +261,8 @@ void MidiClockOutThread::run() {
     std::chrono::time_point nowTime = std::chrono::steady_clock::now();
 
     while (!stopNow) {
-        // Add extra sync tick to the queue
-        if (getPendingSyncAdjustment() > 0) {
+        /// Add extra sync tick to the queue
+        if (getPendingSyncAdjustment() > 0) { 
             if (!queueDirectRTMidi(0xF8)) {
                 qWarning() << "Failed to queue extra tick";
             } else {
@@ -246,20 +271,39 @@ void MidiClockOutThread::run() {
             }
         }
 
-        // Midi
+        /// Beat clock - generates time-based ticks to put in the queue
+        nowTime = std::chrono::steady_clock::now();
+        auto currentBeatPos = getBeatPosAt(nowTime);
+        if (getBeatClockState()) {
+            auto nextPos = getNextBeatPos();
+            //qDebug() << "MidiClockOutThread::run() Current,next: " << currentBeatPos << nextPos;
+            if (currentBeatPos > getNextBeatPos()) {
+                //qDebug() << "TIME FOR NO MORE OF THOSE THREAD-BLOCKIN' BEATS!";
+                if (!queueDirectRTMidi(0xF8)) {
+                    qWarning() << "Failed to queue";
+                }
+                beatMutex.lock();
+                // This factors out to m_nextBeatPos = (m_tickCount + 1) / 24.0;
+                m_nextBeatPos = calcNextTickBeatPos(m_tickCount / 24.0); // TODO(Tuuli): check ++mV_ticksSinceBpmChange in tick() for how planned ticks in the past are handled without the thread
+                m_tickCount++;
+                beatMutex.unlock();
+            }
+        }
+
+        /// Midi
         midiMutex.lock();
         if (m_pMidiFIFOQueue->readAvailable()) {
             uint8_t data;
             if(m_pMidiFIFOQueue->read(&data, 1) == 1){                
                 midiMutex.unlock();
-                if ((data == 0xF8) && (getPendingSyncAdjustment() < 0)) { //TODO(Tuuli)
+                if ((data == 0xF8) && (getPendingSyncAdjustment() < 0)) {
                     addPendingSyncAdjustment((int16_t)1);
                     qDebug() << "MidiClockOutThread, Skipped a tick ";
                 } else {                                        
                     if (sendDirectRTMidi(data)) {
                         // qDebug() << "MidiClockOutThread::sendDirectRTMidi, sent " << data;
                         if (data == 0xF8) {
-                            emit tickSent(0); // TODO(Tuuli): Tick the gui when it's queued, or emitted? Related to sync too...
+                            emit tickSent(0);
                         }
                     } else {
                         qWarning() << "MidiClockOutThread::sendDirectRTMidi, failed to send " << data;
@@ -273,306 +317,10 @@ void MidiClockOutThread::run() {
             midiMutex.unlock();
         }
 
-        // Beat clock - generates time-based ticks to put in the queue
-        nowTime = std::chrono::steady_clock::now();
-        auto currentBeatPos = getBeatPosAt(nowTime);
-        if (getBeatClockState()) {                           
-            if (currentBeatPos > getNextBeat()) { //if (m_nextBeatPos < m_beatStartPos + m_beatSpeed * (now() - m_beatStartTime))
-                //qDebug() << "TIME FOR SOME MORE OF THOSE SMASH-ROCKIN BEATS!";                                
-                if (!queueDirectRTMidi(0xF8)) {
-                    qWarning() << "Failed to queue";
-                }                
-                beatMutex.lock();                
-                m_nextBeatPos = getNextTickBeatPos(m_tickCount / 24.0); //TODO(Tuuli): check ++mV_ticksSinceBpmChange in tick() for how planned ticks in the past are handled without the thread 
-                //m_nextBeatPos = (m_tickCount + 1) / 24.0;
-                m_tickCount++; //TODO(Tuuli) Check if this should be done after or before; after setting the beat position seems right
-                beatMutex.unlock();
-
-                // if (m_nextBeatPos < getBeatPosAt(now()))
-                // if (m_nextBeatPos < m_beatStartPos + m_beatSpeed * (now() - m_beatStartTime))
-                    // m_tickCount++;
-                    // m_nextBeatPos = (m_tickCount + 1) / 24.0;
-                    // m_nextBeatPos = getNextTickBeatPos(m_tickCount / 24.0);
-                    // m_nextBeatPos = (std::floor(m_tickCount / 24.0 * 24.0) + 1) / 24.0;
-                    // m_nextBeatPos = (std::floor(m_tickCount) + 1) / 24.0;
-            }
-        }
         usleep(200);
 
-        mutex.lock();
+        mutex.lock(); //TODO(Tuuli) How expensive is this mutex lock? This could be a shared mutex since it is read every 200us but written rarely. Or an atomic boolean variable?
         stopNow = stopplz;
         mutex.unlock();
     }
 }
-/// 
-/// beatSpeed [ beats per us ] = bpm [b/min] * 1/60 [min/s] * 1/1,000,000 [s/us] = bpm / 60,000,000 [b/us]
-/// sync events : change the startPos
-/// tempo events : change the beatSpeed, at a specific startTime
-/// 
-/// beatPosTotal = startPos + beatSpeed * (time - startTime)
-/// nextBeat = 2
-/// if (beatPosTotal > nextBeat){
-///     tick();
-///     nextBeat++;
-/// }
-/// 
-/// void MidiClockOutThread::setBeatTempoAt(std::chrono::steady_clock::time_point startTime, double bpm);
-/// double MidiClockOutThread::getBeatDistance();
-/// void MidiClockOutThread::setPosAtTime(std::chrono::steady_clock::time_point time, double beatPos);
-/// 
-
-
-/// OLDDDDDDDDDDDDDDD ////////////////////////////////////////////////
-/// 
-/// 
-
-/*
-namespace {
-const mixxx::Logger kLogger("MidiClockOutThread");
-constexpr std::chrono::microseconds kStartTickLength{(int)(2500000.0 / 120.0)};
-const uint8_t sendStop = 1 << 1, sendContinue = 1 << 2, sendStart = 1 << 3, sendTickSyncExtra = 1 << 4, sendTickSyncSkip = 1 << 5, sendTick = 1 << 6;
-} // namespace
-
-MidiClockOutThread::MidiClockOutThread(MidiClockOut* parent)
-        : QThread(parent),
-          m_pMidiClockOutParent(parent),
-          stopplz(false),
-          mV_sendTicksEnabled(false),
-          mV_tickAdjustment(0),
-          mV_ticksSinceBpmChange(0),
-          mV_tickFlag(false),
-          mV_startFlag(false),
-          mV_continueFlag(false),
-          mV_stopFlag(false) {
-    // uint32_t mV_ticksSinceBpmChange;
-    // int16_t mV_tickAdjustment;
-    // std::chrono::microseconds mV_timeReceivedNewLeaderBpm;
-    // std::chrono::microseconds mV_currentTickLength;
-    this->setObjectName("MidiClockOutThread");
-    setTickTimerParameters(std::chrono::steady_clock::now(), kStartTickLength);
-    qDebug() << "MidiClockOutThread::Create ";
-}
-MidiClockOutThread::~MidiClockOutThread() {
-    qDebug() << "MidiClockOutThread::destroy ";
-    mutex.lock();
-    stopplz = true;
-    cond.wakeOne();
-    mutex.unlock();
-    wait();
-}
-
-
- 
-
-void MidiClockOutThread::startMidiClockOutThread() {
-    QMutexLocker locker(&mutex);
-    if (!isRunning()) {
-        // m_startTime = std::chrono::steady_clock::now();
-        start();
-    } else
-        cond.wakeOne();
-    qDebug() << "MidiClockOutThread::startMidiClockOutThread";
-}
-void MidiClockOutThread::stopPlease() {
-    mutex.lock();
-    stopplz = true;
-    mutex.unlock();    
-}
-
-void MidiClockOutThread::setTickTimerParameters(std::chrono::steady_clock::time_point timeTempoSet, std::chrono::microseconds tempoInterval) {
-    QMutexLocker locker(&mutex);
-    mV_timeReceivedNewLeaderBpm = timeTempoSet;
-    mV_currentTickLength = tempoInterval;
-    mV_plannedNextTickTime = mV_timeReceivedNewLeaderBpm + mV_currentTickLength;
-    qDebug() << "MidiClockOutThread::setTickTimerParameters " << mV_currentTickLength;
-}
-void MidiClockOutThread::setTickAdjustment(int16_t adjustment) {
-    QMutexLocker locker(&mutex);
-    mV_tickAdjustment += adjustment;
-    qDebug() << "MidiClockOutThread::setTickAdjustment ";
-}
-void MidiClockOutThread::resetTickAdjustment() {
-    QMutexLocker locker(&mutex);
-    mV_tickAdjustment = 0;
-    qDebug() << "MidiClockOutThread::resetTickAdjustment ";
-}
-
-
-/// @brief Sets the MidiClockOut interval between 0xF8 ticks for sending clock tempo; called from main thread
-/// @param interval the clock tick interval in nanoseconds
-void MidiClockOutThread::setTimerInterval(std::chrono::nanoseconds interval) {
-    QMutexLocker locker(&mutex);
-    //m_interval = interval;
-    mV_currentTickLength = std::chrono::duration_cast<std::chrono::microseconds>(interval);    
-    qDebug() << "MidiClockOutThread::setTimerInterval ";
-}
-
-void MidiClockOutThread::startTicks() {
-    QMutexLocker locker(&mutex);
-    mV_sendTicksEnabled = true;
-    qDebug() << "MidiClockOutThread::startTicks (queued) ";
-}
-
-void MidiClockOutThread::stopTicks() {
-    QMutexLocker locker(&mutex);
-    mV_sendTicksEnabled = false;
-    qDebug() << "MidiClockOutThread::stopTicks (queued) ";
-}
-
-void MidiClockOutThread::testTickLength() {
-    auto startTime = std::chrono::steady_clock::now();
-    uint32_t ticks = 0;
-    bool stopNow = false;
-    while (!stopNow && ticks < 5000) {
-        // timeNow.time_since_epoch() << ", C" << m_tickCounter;
-        
-
-        //mutex.lock();
-        //if (timeNow > (m_startTime + std::chrono::seconds(10))) {
-        //    stopplz = true;
-        //    //TODO(Tuuli): Instead run it 1000 times, and time it.
-        //}
-        //mutex.unlock();
-        
-
-        ticks++;
-        // int timecount = timeNow.time_since_epoch().count();
-
-        usleep(200);
-
-        // TODO(Tuuli): is stopplz accessed from ~MidiClockOutThread? hidiothread uses m_runLoopSemaphore
-        mutex.lock();
-        stopNow = stopplz;        
-        mutex.unlock();
-
-        
-        //mutex.lock();
-        //emit tickSent();
-        ////cond.wait(&mutex);
-        //mutex.unlock();
-        
-    }
-    auto endTime = std::chrono::steady_clock::now();
-    qDebug() << "MidiClockOutThread::testTickLength (10s) " << std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-}
-
-
-void MidiClockOutThread::sendMidiClockTick() {    
-    QMutexLocker locker(&mutex);
-    mV_tickFlag = true;
-    qDebug() << "MidiClockOutThread::sendMidiClockTick queued ";
-}                                                 
-void MidiClockOutThread::sendMidiClockStart() {
-    QMutexLocker locker(&mutex);
-    mV_startFlag = true;
-    qDebug() << "MidiClockOutThread::sendMidiClockStart queued ";
-}                                                 
-void MidiClockOutThread::sendMidiClockContinue() {
-    QMutexLocker locker(&mutex);
-    mV_continueFlag = true;
-    qDebug() << "MidiClockOutThread::sendMidiClockCont queued ";
-}                                             
-void MidiClockOutThread::sendMidiClockStop() {
-    QMutexLocker locker(&mutex);
-    mV_stopFlag = true;
-    qDebug() << "MidiClockOutThread::sendMidiClockStop queued ";
-}
-
-void MidiClockOutThread::sendMidiClockTTick() {
-    m_pMidiClockOutParent->sendMidiClockTick();
-}
-void MidiClockOutThread::sendMidiClockTStart() {
-    m_pMidiClockOutParent->sendMidiClockStart();
-}
-void MidiClockOutThread::sendMidiClockTContinue() {
-    m_pMidiClockOutParent->sendMidiClockContinue();
-}
-void MidiClockOutThread::sendMidiClockTStop() {
-    m_pMidiClockOutParent->sendMidiClockStop();
-}
-
-void MidiClockOutThread::run() {           
-    //bool stopNow = false;
-    //uint8_t outputData = 0; //TODO(Tuuli): This var isnt needed, everything is handled in the if-else including the results.
-
-    //testTickLength();
-
-    //TODO(Tuuli): Do these need to be set? Shouldnt.. they are set when new tempo events are received, and when the thread is initialized
-    //mV_ticksSinceBpmChange = 0;
-    //mV_timeReceivedNewLeaderBpm = std::chrono::steady_clock::now();    
-    //mV_currentTickLength = kStartTickLength;   
-
-    while (!stopplz) {
-        // Output in priority order: stop, continue, start, tick                      
-
-        // Check for start, stop commands
-        mutex.lock();
-        if (mV_stopFlag) {
-            //outputData = sendStop;
-            mV_stopFlag = false;
-            //mV_sendTicksEnabled = false; // TODO(Tuuli): does it make sense to stop ticking when we stop?
-            mutex.unlock();
-            qDebug() << "MidiClockOutThread::run STOP ";
-            sendMidiClockTStop();
-        } 
-        else if (mV_continueFlag) {
-            //outputData = sendContinue;
-            mV_continueFlag = false;
-            mutex.unlock();
-            qDebug() << "MidiClockOutThread::run CONTINUE ";
-            sendMidiClockTContinue();
-        } 
-        else if (mV_startFlag) {
-            //outputData = sendStart;
-            mV_startFlag = false;
-            //mV_sendTicksEnabled = true; //TODO(Tuuli): does it make sense to start ticking when we start?
-            mutex.unlock();
-            qDebug() << "MidiClockOutThread::run START ";
-            sendMidiClockTStart();
-        } 
-        // Check for sync shifts
-        else if (mV_tickAdjustment > 0) {
-            //outputData = sendTickSyncExtra;
-            mV_tickAdjustment -= 1;
-            mutex.unlock();
-            qDebug() << "MidiClockOutThread::run SYNCTICK ";            
-            sendMidiClockTTick();            
-        }         
-        // Check for tempo ticks
-        else if (mV_sendTicksEnabled) {            
-            if (std::chrono::steady_clock::now() > mV_plannedNextTickTime) {
-                if (mV_tickAdjustment < 0) {
-                    //outputData = sendTickSyncSkip;
-                    mV_tickAdjustment++;
-                    mutex.unlock();
-                    qDebug() << "MidiClockOutThread::run SKIPTICK ";
-                } else {
-                    mutex.unlock();
-                    //outputData = sendTick;
-                    qDebug() << "MidiClockOutThread::run TEMPOTICK ";
-                    sendMidiClockTTick();  
-                    emit tickSent();
-                }
-                mutex.lock();
-                mV_ticksSinceBpmChange++;
-                mV_plannedNextTickTime = mV_timeReceivedNewLeaderBpm + mV_currentTickLength * mV_ticksSinceBpmChange;                       
-            }            
-            mutex.unlock();
-        } 
-        else {
-            mutex.unlock();
-        }
-
-        usleep(200);
-
-        
-        //mutex.lock();
-        //stopNow = stopplz;
-        //mutex.unlock();
-        
-    }
-    mutex.lock();    
-    cond.wait(&mutex);
-    mutex.unlock();
-}
-*/
