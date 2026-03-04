@@ -161,15 +161,14 @@ double MidiClockOutThread::getBeatPosAt(std::chrono::steady_clock::time_point ti
 double MidiClockOutThread::setBeatTempoAt(std::chrono::steady_clock::time_point startTime, double bpm) {
     double beatSpeed = calcBeatSpeedFromBpm(bpm);
     double beatStartPos = getBeatPosAt(startTime); /// The previous beat location at that time stamp is now the starting beat position for the new speed, with the new start time
-    auto currentPos = getBeatPosAt(std::chrono::steady_clock::now());
-    auto nextBeat = calcNextTickBeatPos(currentPos);
+    auto currentPos = getBeatPosAt(std::chrono::steady_clock::now());    
     
     const QMutexLocker locker(&beatMutex);
     m_beatSpeed = beatSpeed;
     m_beatStartTime = startTime;
     m_beatStartPos = beatStartPos;
-    m_nextBeatPos = nextBeat;
-    m_tickCount = std::floor(currentPos * 24.0);
+    m_nextBeatPos = calcNextTickBeatPos(currentPos);
+    m_tickCount = calcTicksFromBeatPos(currentPos);
     return beatStartPos;
 }
 double MidiClockOutThread::setBeatPosAt(std::chrono::steady_clock::time_point time, double beatPos, bool addExisting) {
@@ -182,10 +181,8 @@ double MidiClockOutThread::setBeatPosAt(std::chrono::steady_clock::time_point ti
     auto newStart = beatPos + numBeats; /// Add whole beats to avoid jumping the count
     // next beat is the next one from now(), not from time - this is wrong probably...
     auto timeNow = std::chrono::steady_clock::now();
-    auto currentPos = getBeatPosAt(timeNow);
-    auto nextBeat = calcNextTickBeatPos(currentPos); //in the old beatPos
-
-
+    //auto currentPos = getBeatPosAt(timeNow);
+    //auto nextCurrentBeat = calcNextTickBeatPos(currentPos); //in the old beatPos
 
     //auto newCurrentPos = getBeatPosAt(std::chrono::steady_clock::now());
     //auto newCurrentPos = m_beatStartPos + m_beatSpeed * ((time - m_beatStartTime) / std::chrono::microseconds(1));
@@ -200,10 +197,11 @@ double MidiClockOutThread::setBeatPosAt(std::chrono::steady_clock::time_point ti
     m_beatStartPos = newStart; 
     m_beatStartTime = time;
     ////m_nextBeatPos = nextBeat;
-    ////m_tickCount = std::floor(currentPos * 24.0);
+    ////m_tickCount = std::floor(currentPos * 24.0);    
+    //auto newCurrentPos = getBeatPosAt(std::chrono::steady_clock::now());
     auto newCurrentPos = newStart + m_beatSpeed * ((timeNow - time) / std::chrono::microseconds(1));
     m_nextBeatPos = calcNextTickBeatPos(newCurrentPos);
-    m_tickCount = std::floor(newCurrentPos * 24.0);
+    m_tickCount = calcTicksFromBeatPos(newCurrentPos);   
     
     return (m_beatStartPos - beatStartPos);
     //beatPos - (beatStartPos - floor(beatStartPos))
