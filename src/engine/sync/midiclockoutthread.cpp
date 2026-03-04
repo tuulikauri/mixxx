@@ -10,7 +10,6 @@
 #include "util/string.h"
 #include "util/time.h"
 #include "util/trace.h"
-#include "util/fifo.h"
 
 namespace {
 const mixxx::Logger kLogger("MidiClockOutThread");
