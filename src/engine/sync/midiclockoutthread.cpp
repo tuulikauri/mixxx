@@ -159,15 +159,12 @@ double MidiClockOutThread::getBeatPosAt(std::chrono::steady_clock::time_point ti
 }
 double MidiClockOutThread::setBeatTempoAt(std::chrono::steady_clock::time_point startTime, double bpm) {
     double beatSpeed = calcBeatSpeedFromBpm(bpm);
-    double beatStartPos = getBeatPosAt(startTime); /// The previous beat location at that time stamp is now the starting beat position for the new speed, with the new start time
-    auto currentPos = getBeatPosAt(std::chrono::steady_clock::now());    
+    double beatStartPos = getBeatPosAt(startTime); /// The previous beat location at that time stamp is now the starting beat position for the new speed, with the new start time    
     
     const QMutexLocker locker(&beatMutex);
     m_beatSpeed = beatSpeed;
     m_beatStartTime = startTime;
-    m_beatStartPos = beatStartPos;
-    m_nextBeatPos = calcNextTickBeatPos(currentPos);
-    m_tickCount = calcTicksFromBeatPos(currentPos);
+    m_beatStartPos = beatStartPos;    
     return beatStartPos;
 }
 double MidiClockOutThread::setBeatPosAt(std::chrono::steady_clock::time_point time, double beatPos, bool addExisting) {
