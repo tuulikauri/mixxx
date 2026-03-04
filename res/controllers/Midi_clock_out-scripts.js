@@ -29,12 +29,12 @@ midi_clock_out.init = function (id) { // called when the MIDI device is opened &
         { id: 3, priority: 0.0, playing: false }
     ];
     
-    engine.makeConnection("[MidiClockOut]", "clock_tick", midi_clock_out.outputF8); // warning [Controller] ControlDoublePrivate::getControl returning NULL for ( "[MidiClockOut]" , "clock_tick" )
+    //engine.makeConnection("[MidiClockOut]", "clock_tick", midi_clock_out.outputF8); // warning [Controller] ControlDoublePrivate::getControl returning NULL for ( "[MidiClockOut]" , "clock_tick" )
     //warning[Controller] "script tried to connect to ControlObject ([MidiClockOut], clock_tick) which is non-existent."
 
-    engine.makeConnection("[MidiClockOut]", "clock_start", midi_clock_out.outputFA);
-    engine.makeConnection("[MidiClockOut]", "clock_continue", midi_clock_out.outputFB);
-    engine.makeConnection("[MidiClockOut]", "clock_stop", midi_clock_out.outputFC);    
+    //engine.makeConnection("[MidiClockOut]", "clock_start", midi_clock_out.outputFA);
+    //engine.makeConnection("[MidiClockOut]", "clock_continue", midi_clock_out.outputFB);
+    //engine.makeConnection("[MidiClockOut]", "clock_stop", midi_clock_out.outputFC);    
 };
 
 midi_clock_out.shutdown = function (id) { // called when the MIDI device is closed

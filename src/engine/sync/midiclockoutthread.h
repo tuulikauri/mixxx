@@ -77,7 +77,7 @@ public:
     bool getBeatClockState();
     
 
-    /// @brief Calculates the beatPos at a point in time
+    /// @brief Calculates the beatPos at a point in time; called by [main]
     /// @param time The time_point for the beatPos
     /// @return beatPos, each integer is a full beat (24 ticks) at the current tempo. 
     /// @details Uses the current beat tempo and position; each integer is a full beat (24 ticks) at the current tempo. Note that mixxx's beatDistance is usually only with respect to the previous beat and never more than 1; this is named beatPosition (or beatPos) to distinguish it

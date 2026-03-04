@@ -148,15 +148,15 @@ class MidiClockOut : public QObject, public Syncable {
     void setMidiClockOutController(Controller* pMidiClockOutController); ///< Sets the controller mapped to "Midi Clock Out"; triggered when a signal is emitted to EngineMixer from the ControllerManager
     void deleteMidiClockOutController(); ///< Cleans up to avoid dangling pointers; triggered from ControllerManager during shutdown
 
-  signals:
-    void clockTick(double value, QObject* pSender);
-    void clockStart(double value, QObject* pSender);
-    void clockContinue(double value, QObject* pSender);
-    void clockStop(double value, QObject* pSender);
+  //signals:
+  //  void clockTick(double value, QObject* pSender);
+  //  void clockStart(double value, QObject* pSender);
+  //  void clockContinue(double value, QObject* pSender);
+  //  void clockStop(double value, QObject* pSender);
   
   private slots:     
-    void slotDummy();
-    void tick();    
+    //void slotDummy();
+    //void tick();    
     void tickGui(int32_t syncTicks); ///< Advances the bars:beats:sixteenths syncTicks+1 times forward in the GUI. Should be used to match the beat position of an external sequencer. Should not tick for skipped or failed ticks, only when a tick is sent to external sequencers.
 
     void slotControlOutEnabled(double controlButtonValue);
@@ -174,18 +174,18 @@ class MidiClockOut : public QObject, public Syncable {
     mixxx::Bpm m_currentBpm; ///< Tempo equivalent to mV_currentTickLength      
 
     std::chrono::microseconds m_absTimeWhenPrevOutputBufferReachesDac;    
-    std::chrono::steady_clock::time_point m_plannedNextTickTime; ///< Next planned tick
+    //std::chrono::steady_clock::time_point m_plannedNextTickTime; ///< Next planned tick
 
-    std::chrono::steady_clock::time_point mV_adjustedTimeReceivedNewBpm; ///< For calculating next timestamp with the new interval; multi-threaded    
-    std::chrono::nanoseconds mV_tempoChangeSyncAdjustment; ///< Cumulative sync adjustments as tempo change happens between ticks; multi-threaded        
-    
-    std::chrono::microseconds mV_currentTickLength; ///< Time between ticks; multithreaded
-    std::chrono::microseconds m_newTickLength; ///< Stores the latest tick interval value not-yet incorporated into the tick timer interval
-    std::chrono::nanoseconds m_intervalLength; // Current tick timer interval. TODO(Tuuli) Does this need to be stored, removed?
-    
-    double m_beatDistance; ///< The beat position of the leader when received
-    std::chrono::steady_clock::time_point m_timeReceivedBeatDistance; ///< The time when the leaders beatDistance was received
-    uint32_t m_ticksReceivedBeatDistance; ///< The ticks when the leaders beatDistance was received
+    //std::chrono::steady_clock::time_point mV_adjustedTimeReceivedNewBpm; ///< For calculating next timestamp with the new interval; multi-threaded    
+    //std::chrono::nanoseconds mV_tempoChangeSyncAdjustment; ///< Cumulative sync adjustments as tempo change happens between ticks; multi-threaded        
+    //
+    //std::chrono::microseconds mV_currentTickLength; ///< Time between ticks; multithreaded
+    //std::chrono::microseconds m_newTickLength; ///< Stores the latest tick interval value not-yet incorporated into the tick timer interval
+    //std::chrono::nanoseconds m_intervalLength; // Current tick timer interval. TODO(Tuuli) Does this need to be stored, removed?
+    //
+    //double m_beatDistance; ///< The beat position of the leader when received
+    //std::chrono::steady_clock::time_point m_timeReceivedBeatDistance; ///< The time when the leaders beatDistance was received
+    //uint32_t m_ticksReceivedBeatDistance; ///< The ticks when the leaders beatDistance was received
 
     bool m_enabled; ///< Enable or disable timing MidiClockOut ticks
 
@@ -196,18 +196,18 @@ class MidiClockOut : public QObject, public Syncable {
     uint32_t m_bars; ///< Number of bars; 4 beats per bar
     // TODO(Tuuli): add a setting to change the meter from 4/4
     
-    bool mflag_bpmChangedThisBar; ///< Used to report bar-length accuracy for steady-BPM bars
+    //bool mflag_bpmChangedThisBar; ///< Used to report bar-length accuracy for steady-BPM bars
   
-    uint32_t mV_ticksSinceBpmChange; ///< Counter to use with mV_adjustedTimeReceivedNewBpm to calculate timepoints; multithreaded
-    
-    int16_t mV_tickAdjustment; ///< Number of ticks to skip or spam to beatjump or otherwise adjust position on external sequencers; multithreaded. Positive numbers mean the MidiClockOut ticks are behind the SyncLeaders phase and need to catchup.
+    //uint32_t mV_ticksSinceBpmChange; ///< Counter to use with mV_adjustedTimeReceivedNewBpm to calculate timepoints; multithreaded
+    //
+    //int16_t mV_tickAdjustment; ///< Number of ticks to skip or spam to beatjump or otherwise adjust position on external sequencers; multithreaded. Positive numbers mean the MidiClockOut ticks are behind the SyncLeaders phase and need to catchup.
 
-    #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
-    QChronoTimer m_ticknsTimer = QChronoTimer(nullptr);
-    #else
-    QTimer m_ticknsTimer = QTimer(nullptr); 
-    #endif
-    Qt::TimerId m_ticknsTimerID;
+    //#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+    //QChronoTimer m_ticknsTimer = QChronoTimer(nullptr);
+    //#else
+    //QTimer m_ticknsTimer = QTimer(nullptr); 
+    //#endif
+    //Qt::TimerId m_ticknsTimerID;
 
     //Tempo
     void handleNewBPM(mixxx::Bpm newBpm); 
@@ -220,8 +220,8 @@ class MidiClockOut : public QObject, public Syncable {
     void fwdSixteenth(); ///< Move external device forward 6 ticks
 
     void forceGetBeatDistance(); // Is this possible?   
-    void adjustSyncTicks(int16_t tickAdjustment); ///< Plans a tick adjustment; thread reads and sends extra ticks, or skips ticks
-    void resetQueuedSyncTicks();                  ///< Resets planned extra or skipped ticks to zero.
+    //void adjustSyncTicks(int16_t tickAdjustment); ///< Plans a tick adjustment; thread reads and sends extra ticks, or skips ticks
+    //void resetQueuedSyncTicks();                  ///< Resets planned extra or skipped ticks to zero.
 
     //MIDI
     bool sendDirectRTMidi(uint8_t status); ///< Sends 3 byte {status, 00, 00} to m_pMidiClockOutController
@@ -236,15 +236,15 @@ class MidiClockOut : public QObject, public Syncable {
     std::unique_ptr<MidiClockOutThread> m_pMidiClockOutThread; ///< Thread for timing and Midi out
 
 
-    //Debug 
-    std::chrono::microseconds m_barLengthMeasured;
-    std::chrono::microseconds m_barLengthError;
-    std::chrono::steady_clock::time_point m_timeReceivedNewBpm;
-    std::chrono::steady_clock::time_point m_endTime;
-    uint32_t m_debugTickCounter;
+    ////Debug 
+    //std::chrono::microseconds m_barLengthMeasured;
+    //std::chrono::microseconds m_barLengthError;
+    //std::chrono::steady_clock::time_point m_timeReceivedNewBpm;
+    //std::chrono::steady_clock::time_point m_endTime;
+    //uint32_t m_debugTickCounter;
     bool m_timingStyleThread;
     bool m_midiStyleThread;
-    void debugBarTime();
+    //void debugBarTime();
 
     //Control objects
     std::unique_ptr<ControlPushButton> m_pMidiClockEnableButton;
@@ -256,10 +256,10 @@ class MidiClockOut : public QObject, public Syncable {
     std::unique_ptr<ControlObject> m_pMidiClockPosBeats;
     std::unique_ptr<ControlObject> m_pMidiClockPosBars;
 
-    std::unique_ptr<ControlObject> m_pMidiClockTick;
-    std::unique_ptr<ControlObject> m_pMidiClockStart;
-    std::unique_ptr<ControlObject> m_pMidiClockContinue;
-    std::unique_ptr<ControlObject> m_pMidiClockStop;
+    //std::unique_ptr<ControlObject> m_pMidiClockTick;
+    //std::unique_ptr<ControlObject> m_pMidiClockStart;
+    //std::unique_ptr<ControlObject> m_pMidiClockContinue;
+    //std::unique_ptr<ControlObject> m_pMidiClockStop;
 
     std::chrono::microseconds getHostTime() const;
     std::chrono::microseconds getHostTimeAtSpeaker(std::chrono::microseconds hostTime) const;    
