@@ -52,8 +52,6 @@
     // currently the clock doesnt adopt tempo of a new leader until that leader changes their BPM... fixed now?
     // Need to capture a notice about the new leader and then pull their BPM.
 
-// TODO(Tuuli) BUG/incomplete following tempo changes doesnt work fully yet, it drifts off-beat from tempo changes. Lock to the beat position. Speeds up when tempo is changed.
-
 // Direct access to Controller:
 //TODO(Tuuli) BUG Crashing when swapping mapped devices (probably garbage collection / pointer issues) Need to handle updates from ControllerManager similarly to initializing and shutdowns (probably can use the same functions / signals already wired up)
 //TODO(Tuuli) BUG Why no messages received by MIDI-OX, was it just that portmidi errored out after a buffer overflow or something? Try to reproduce by crashing / overflowing portmidi and see what happens... Swapping devices seemed to fix it last time...
@@ -336,7 +334,7 @@ void MidiClockOut::updateLeaderBeatDistance(double beatDistance) {
 
     /// When the leader moves the beatDistance, follow and queue up a tickSyncAdjustment if the clock is enabled
     if (m_enabled) {
-        auto threadSyncOffset = m_pMidiClockOutThread->setBeatPosAt(std::chrono::steady_clock::now(), beatDistance);
+        auto threadSyncOffset = m_pMidiClockOutThread->setBeatPosFromBeatDistanceAt(std::chrono::steady_clock::now(), beatDistance);
         m_pMidiClockOutThread->addPendingSyncAdjustment(threadSyncOffset); // TODO(Tuuli) Add a sync-follow setting
     }
 }

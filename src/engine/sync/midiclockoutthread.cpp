@@ -202,6 +202,12 @@ double MidiClockOutThread::setBeatPosAt(std::chrono::steady_clock::time_point ti
     return (m_beatStartPos - beatStartPos);
     //beatPos - (beatStartPos - floor(beatStartPos))
 }
+double MidiClockOutThread::setBeatPosFromBeatDistanceAt(std::chrono::steady_clock::time_point time, double beatDistance, bool addExisting) {
+    qWarning() << "DEBUG: MidiClockOutThread::setBeatPosFromBeatDistanceAt " << beatDistance;
+    double wholeBeats;
+    auto partialBeats = modf(beatDistance, &wholeBeats);
+    return setBeatPosAt(time, partialBeats, addExisting);
+}
 double MidiClockOutThread::resetBeatPosAt(std::chrono::steady_clock::time_point time) {    
     double beatResetPos = getBeatPosAt(time); /// The previous beat location at that time stamp is now the starting beat location
 

@@ -95,6 +95,13 @@ public:
     /// @return Returns how far the jump was and which direction, used to send sync ticks
     double setBeatPosAt(std::chrono::steady_clock::time_point time, double beatPos, bool addExisting = true); 
     
+    /// @brief Moves the start position and start time but only by 1 beat; called from [main]
+    /// @param time The time_point for the beatDistance
+    /// @param beatDistance The beatDistance, usually from a beatjump control
+    /// @details Preserves whole beats in the beat position by default.
+    /// @return Returns how far the jump was and which direction, used to send sync ticks   
+    double setBeatPosFromBeatDistanceAt(std::chrono::steady_clock::time_point time, double beatDistance, bool addExisting = true);
+
     /// @brief Resets the beatPos to start at zero at a new time; called from [main]
     /// @param time The time_point for the beatPos to equal zero
     /// @return Returns the previous beat position for that time, before reset
