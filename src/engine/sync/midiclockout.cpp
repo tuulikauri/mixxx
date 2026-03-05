@@ -240,11 +240,11 @@ void MidiClockOut::slotControlOutEnabled(double controlButtonValue) {
     if (m_enabled) {
         sendMidiClockStart();
         m_pEngineSync->requestSyncMode(this, SyncMode::Follower);
-        m_pEngineSync->notifyPlayingAudible(this, true); // TODO(Tuuli): is this required? Will we get the leaders tempo if we're audible?
+        //m_pEngineSync->notifyPlayingAudible(this, true); // TODO(Tuuli): is this required? Will we get the leaders tempo if we're audible?
     } else {
         sendMidiClockStop();
         m_pEngineSync->requestSyncMode(this, SyncMode::None);
-        m_pEngineSync->notifyPlayingAudible(this, false);
+        //m_pEngineSync->notifyPlayingAudible(this, false);
     }
 }
 
@@ -318,9 +318,12 @@ bool MidiClockOut::isQuantized() const {
 mixxx::Bpm MidiClockOut::getBpm() const {
     return m_currentBpm;
 }
-double MidiClockOut::getBeatDistance() const {
-    // return std::fmod(m_tickCount, 24.0);
-    return m_pMidiClockOutThread->getBeatPosAt(std::chrono::steady_clock::now());
+double MidiClockOut::getBeatDistance() const {        
+    auto beatPosition = m_pMidiClockOutThread->getBeatPosAt(std::chrono::steady_clock::now());
+    double wholeBeats;
+    auto partialBeats = modf(beatPosition, &wholeBeats);
+    qWarning() << "MidiClockOut::getBeatDistance() " << partialBeats;
+    return partialBeats;
 }
 mixxx::Bpm MidiClockOut::getBaseBpm() const {
     return m_currentBpm; // TODO(Tuuli): whats this for? Half/double?
