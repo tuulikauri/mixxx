@@ -1079,10 +1079,12 @@ bool EngineMixer::sidechainMixRequired() const {
 }
 
 void EngineMixer::slotFoundMidiClockOut(QString name, Controller* pMidiClockOutController) {
+    Q_UNUSED(name)
     qDebug() << "EngineMixer::slotFoundMidiClockOut sending to EngineSync";
     m_pEngineSync->setMidiClockOutController(pMidiClockOutController);
 }
 void EngineMixer::slotDeleteMidiClockOut(QString name) {
+    Q_UNUSED(name)
     qDebug() << "EngineMixer::slotDeleteMidiClockOut sending to EngineSync";
     m_pEngineSync->deleteMidiClockOutController();
 }

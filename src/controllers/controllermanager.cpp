@@ -134,6 +134,7 @@ ControllerManager::ControllerManager(UserSettingsPointer pConfig)
 }
 
 ControllerManager::~ControllerManager() {
+    emit deleteMidiClockOut(m_midiClockOutControllerName);
     emit requestShutdown();
     m_pThread->wait();
     delete m_pThread;
@@ -293,7 +294,7 @@ void ControllerManager::slotSetUpDevices() {
         
         auto mappingName = pMapping->name();
 
-        // This runs on the main thread but LegacyControllerMapping is not thread safe, so clone it.        
+        // This runs on the main thread but LegacyControllerMapping is not thread safe, so clone it.
         pController->setMapping(std::move(pMapping));
 
         // If we are in safe mode, skip opening controllers.
@@ -403,7 +404,7 @@ void ControllerManager::openController(Controller* pController) {
     if (pController->isOpen()) {
         pController->close();
     }
-    int result = pController->open(m_pConfig->getResourcePath()); 
+    int result = pController->open(m_pConfig->getResourcePath());
     pollIfAnyControllersOpen();
 
     // If successfully opened the device, apply the mapping and save the
