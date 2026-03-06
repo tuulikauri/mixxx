@@ -43,25 +43,31 @@ MidiClockOutThread::~MidiClockOutThread() {
     wait();
     qDebug() << "MidiClockOutThread::done ";
 }
-void MidiClockOutThread::startMidiClockOutThread() {
+void MidiClockOutThread::startMidiClockOutThread() { // TODO(Tuuli) This can be combined with setMidiClockOutController; theres no reason for the thread to run if there's no MIDI controller mapped
     QMutexLocker locker(&mutex);
     if (!isRunning()) {
         // m_startTime = std::chrono::steady_clock::now();
         start(QThread::HighestPriority);
-    } else
+    } else {
         cond.wakeOne();
+        if (m_pMidiClockOutController) {
+            condMidiControllerExists.wakeOne();
+        }
+    }
     qDebug() << "MidiClockOutThread::startMidiClockOutThread";
 }
 void MidiClockOutThread::stopThreadAndWait() {
-    mutex.lock();
-    stopplz = true;
-    mutex.unlock();
-
     resetPendingSyncAdjustment();
 
     midiMutex.lock();
     m_pMidiFIFOQueue->releaseReadRegions(m_pMidiFIFOQueue->readAvailable());
     midiMutex.unlock();
+
+    mutex.lock();
+    stopplz = true;
+    condMidiControllerExists.wakeOne();
+    cond.wakeOne();
+    mutex.unlock();
 
     wait();
 }
@@ -114,20 +120,41 @@ bool MidiClockOutThread::sendDirectRTMidi(uint8_t status) {
     } else {
         return false;
     }
-
+    
+    mutex.lock();
     if (m_pMidiClockOutController) {
         if (m_pMidiClockOutController->isOpen()) {
-            return (m_pMidiClockOutController->sendBytes(midiRTMessage)); //TODO(Tuuli) Eventually calls portmidi.h::Pm_WriteShort(m_pStream, 0, message) - is this blocking?
+            auto midiResult = m_pMidiClockOutController->sendBytes(midiRTMessage);
+            mutex.unlock();
+            return (midiResult); // TODO(Tuuli) Eventually calls portmidi.h::Pm_WriteShort(m_pStream, 0, message) - is this blocking?
         }
     }
+    mutex.unlock();
+
     //qDebug() << "MidiClockOutThread::sendDirectRTMidi, sent " << status;
     return false;
 }
 void MidiClockOutThread::setMidiClockOutController(Controller* pMidiClockOutController) {
-    m_pMidiClockOutController = pMidiClockOutController; ///< Duplicate unowned pointer to the Controller that is linked to Midi Clock Out mapping
+    mutex.lock();
+    if (m_pMidiClockOutController) {
+        m_pMidiClockOutController = pMidiClockOutController; ///< Duplicate unowned pointer to the Controller that is linked to Midi Clock Out mapping
+        condMidiControllerExists.wakeOne();
+    }
+    mutex.unlock();
+    startMidiClockOutThread();
 }
 void MidiClockOutThread::deleteMidiClockOutController() {
+    mutex.lock();
     m_pMidiClockOutController = nullptr;
+    mutex.unlock();
+
+    resetPendingSyncAdjustment();
+
+    midiMutex.lock();
+    m_pMidiFIFOQueue->releaseReadRegions(m_pMidiFIFOQueue->readAvailable());
+    midiMutex.unlock();
+
+    //cond.wait(&mutex);
 }
 
 void MidiClockOutThread::setBeatClockState(bool state) {
@@ -342,6 +369,10 @@ void MidiClockOutThread::run() {
 
         mutex.lock(); //TODO(Tuuli) How expensive is this mutex lock? This could be a shared mutex since it is read every 200us but written rarely. Or an atomic boolean variable?
         stopNow = stopplz;
+        /// If there's no longer a Midi controller, but the thread hasn't been told to end, wait for a new Midi controller
+        if (!m_pMidiClockOutController && !stopNow) {
+            condMidiControllerExists.wait(&mutex);
+        }
         mutex.unlock();
     }
 }
