@@ -171,7 +171,10 @@ void ControllerManager::slotInitialize() {
 }
 
 void ControllerManager::slotShutdown() {
-    stopPolling();
+    emit deleteMidiClockOut(m_midiClockOutControllerName);
+    m_pMidiClockOutController = nullptr;
+
+    stopPolling();    
 
     // Clear m_enumerators before deleting the enumerators to prevent other code
     // paths from accessing them.
@@ -287,8 +290,10 @@ void ControllerManager::slotSetUpDevices() {
             continue;
         }
         pMapping->loadSettings(m_pConfig, pController->getName());
+        
+        auto mappingName = pMapping->name();
 
-        // This runs on the main thread but LegacyControllerMapping is not thread safe, so clone it.
+        // This runs on the main thread but LegacyControllerMapping is not thread safe, so clone it.        
         pController->setMapping(std::move(pMapping));
 
         // If we are in safe mode, skip opening controllers.
@@ -303,6 +308,14 @@ void ControllerManager::slotSetUpDevices() {
         if (value != 0) {
             qWarning() << "There was a problem opening" << name;
             continue;
+        } 
+        else {
+            if (mappingName == "MIDI Clock Out") {
+                qDebug() << "Found MIDI Clock Out, emitting signal with pointer to controller.";
+                m_midiClockOutControllerName = deviceName;                
+                m_pMidiClockOutController = pController;
+                emit foundMidiClockOut(m_midiClockOutControllerName, m_pMidiClockOutController);                    
+            }
         }
     }
 
@@ -390,7 +403,7 @@ void ControllerManager::openController(Controller* pController) {
     if (pController->isOpen()) {
         pController->close();
     }
-    int result = pController->open(m_pConfig->getResourcePath());
+    int result = pController->open(m_pConfig->getResourcePath()); 
     pollIfAnyControllersOpen();
 
     // If successfully opened the device, apply the mapping and save the
@@ -441,11 +454,18 @@ void ControllerManager::slotApplyMapping(Controller* pController,
     // Save the file path/name in the config so it can be auto-loaded at
     // startup next time
     m_pConfig->set(key, pMapping->filePath());
+    auto mappingName = pMapping->name();
 
     pController->setMapping(std::move(pMapping));
 
     if (bEnabled) {
         emit mappingApplied(pController->isMappable());
+        if (mappingName == "MIDI Clock Out") {
+            qDebug() << "Found MIDI Clock Out, emitting signals with pointer to controller.";            
+            m_midiClockOutControllerName = sanitizeDeviceName(pController->getName());
+            m_pMidiClockOutController = pController;
+            emit foundMidiClockOut(m_midiClockOutControllerName, m_pMidiClockOutController);    
+        }
     } else {
         emit mappingApplied(false);
         return;
@@ -466,4 +486,8 @@ QList<QString> ControllerManager::getMappingPaths(UserSettingsPointer pConfig) {
     scriptPaths.append(userMappingsPath(pConfig));
     scriptPaths.append(resourceMappingsPath(pConfig));
     return scriptPaths;
+}
+
+Controller* ControllerManager::getMidiClockOutControllerPtr() {
+    return m_pMidiClockOutController;
 }

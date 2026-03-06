@@ -5,6 +5,7 @@
 #include "engine/channels/enginechannel.h"
 #include "engine/enginebuffer.h"
 #include "engine/sync/midiclockout.h"
+#include "controllers/controller.h"
 #include "engine/sync/abletonlink.h"
 #include "engine/sync/internalclock.h"
 #include "util/assert.h"
@@ -509,7 +510,9 @@ void EngineSync::notifySeek(Syncable* pSyncable, mixxx::audio::FramePos position
         double beatDistance = pSyncable->getBeatDistance();
         updateLeaderBeatDistance(pSyncable, beatDistance);
         m_pAbletonLink->updateLeaderBeatDistance(beatDistance);
-        m_pMidiClockOut->updateLeaderBeatDistance(beatDistance);
+        if (pSyncable->isPlaying()) {
+            m_pMidiClockOut->updateLeaderBeatDistance(beatDistance);
+        }
     }
 }
 
@@ -783,8 +786,10 @@ void EngineSync::reinitLeaderParams(Syncable* pSource) {
     // based on un-multiplied bpm values).
     pSource->notifyLeaderParamSource();
 
+    bool sourceIsPlaying = true; /// flag for MidiClockOut to only follow a deck or AbletonLink
     double beatDistance = pSource->getBeatDistance();
     if (!pSource->isPlaying()) {
+        sourceIsPlaying = false;
         // If the params source is not playing, but other syncables are, then we are a stopped
         // explicit Leader and we should not initialize the beat distance.  Take it from the
         // internal clock instead, because that will be up to date with the playing deck(s).
@@ -805,6 +810,7 @@ void EngineSync::reinitLeaderParams(Syncable* pSource) {
             beatDistance = m_pInternalClock->getBeatDistance();
         } else if (m_pAbletonLink->isPlaying()) {
             beatDistance = m_pAbletonLink->getBeatDistance();
+            //sourceIsPlaying = true; //disabled because beatDistance might be from a AbletonLink and bpm from pSource, so this needs to be fixed before we send to MidiClockOut
         }
     }
     const mixxx::Bpm baseBpm = pSource->getBaseBpm();
@@ -827,7 +833,7 @@ void EngineSync::reinitLeaderParams(Syncable* pSource) {
     if (pSource != m_pAbletonLink) {
         m_pAbletonLink->reinitLeaderParams(beatDistance, baseBpm, bpm);
     }
-    if (pSource != m_pMidiClockOut) {
+    if ((pSource != m_pMidiClockOut) && sourceIsPlaying) {
         m_pMidiClockOut->reinitLeaderParams(beatDistance, baseBpm, bpm);
     }
     foreach (Syncable* pSyncable, m_syncables) {
@@ -854,4 +860,14 @@ Syncable* EngineSync::getUniquePlayingSyncedDeck() const {
         }
     }
     return onlyPlaying;
+}
+
+MidiClockOut* EngineSync::getMidiClockOut() {
+    return m_pMidiClockOut;
+}
+void EngineSync::setMidiClockOutController(Controller* pMidiClockOutController) {
+    m_pMidiClockOut->setMidiClockOutController(pMidiClockOutController);
+}
+void EngineSync::deleteMidiClockOutController() {
+    m_pMidiClockOut->deleteMidiClockOutController();
 }

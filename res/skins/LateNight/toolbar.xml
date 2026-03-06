@@ -143,7 +143,7 @@
         <SizePolicy>min,min</SizePolicy>
         <Children>
           <Template src="skin:/controls/button_2state_persist.xml">
-            <SetVariable name="TooltipId">midiclock_enabled</SetVariable>
+            <SetVariable name="TooltipId">sync_enabled</SetVariable>
             <SetVariable name="ObjectName">GuiToggleButton</SetVariable>
             <SetVariable name="Size">35f,20f</SetVariable>
             <SetVariable name="state_0_text">Send</SetVariable>
@@ -152,7 +152,7 @@
           </Template>
 
           <Template src="skins:LateNight/controls/button_1state_right.xml">
-            <SetVariable name="TooltipId">midiclock_restart</SetVariable>
+            <SetVariable name="TooltipId">sync_enabled</SetVariable>
             <SetVariable name="ObjectName">Reverse</SetVariable>
             <SetVariable name="Size">26f,26f</SetVariable>
             <SetVariable name="ConfigKey">[MidiClockOut],restart</SetVariable>
@@ -160,7 +160,7 @@
           </Template>         
           
           <Template src="skins:LateNight/controls/button_1state_right.xml">
-            <SetVariable name="TooltipId">midiclock_nudge_back</SetVariable>
+            <SetVariable name="TooltipId">sync_enabled</SetVariable>
             <SetVariable name="ObjectName">RateTempDown</SetVariable>
             <SetVariable name="Size">26f,26f</SetVariable>
             <SetVariable name="ConfigKey">[MidiClockOut],nudge_back</SetVariable>
@@ -168,7 +168,7 @@
           </Template>
           
           <Template src="skins:LateNight/controls/button_1state_right.xml">
-            <SetVariable name="TooltipId">midiclock_nudge_fwd</SetVariable>
+            <SetVariable name="TooltipId">sync_enabled</SetVariable>
             <SetVariable name="ObjectName">RateTempUp</SetVariable>
             <SetVariable name="Size">26f,26f</SetVariable>
             <SetVariable name="ConfigKey">[MidiClockOut],nudge_fwd</SetVariable>
@@ -176,9 +176,9 @@
           </Template>
           
           <Number>
-            <TooltipId>num_bars</TooltipId>
+            <Tooltip>Bars Counter</Tooltip>
             <ObjectName>MidiClockBars</ObjectName>
-            <Size>30f,0min</Size>
+            <Size>35f,0min</Size>
             <NumberOfDigits>0</NumberOfDigits>
             <Alignment>right</Alignment>
             <Connection>
@@ -186,9 +186,9 @@
             </Connection>
           </Number>
           <Number>
-            <TooltipId>num_beats</TooltipId>
+            <Tooltip>Beats Counter</Tooltip>
             <ObjectName>MidiClockBeats</ObjectName>
-            <Size>20f,0min</Size>
+            <Size>20f,26f</Size>
             <NumberOfDigits>0</NumberOfDigits>
             <Alignment>right</Alignment>
             <Connection>
@@ -196,9 +196,9 @@
             </Connection>
           </Number>          
           <Number>
-            <TooltipId>num_sixteenths</TooltipId>
+            <Tooltip>Sixteenths Counter</Tooltip>
             <ObjectName>MidiClockSixteenths</ObjectName>
-            <Size>20f,0min</Size>
+            <Size>20f,26f</Size>
             <NumberOfDigits>0</NumberOfDigits>
             <Alignment>right</Alignment>
             <Connection>
@@ -206,19 +206,25 @@
             </Connection>
           </Number>
 
-          <Size>10min,1min</Size>
-
+          <Label>
+            <ObjectName>blank</ObjectName>
+            <Tooltip>blank</Tooltip>
+            <Size>10f,10f</Size>
+            <Alignment>center</Alignment>
+            <Text> </Text>
+          </Label>
+          
           <Template src="skin:/controls/button_1state.xml">
-            <SetVariable name="TooltipId">midiclock_enabled</SetVariable>
+            <SetVariable name="TooltipId">sync_enabled</SetVariable>
             <SetVariable name="ObjectName">GuiToggleButton</SetVariable>
             <SetVariable name="Size">35f,20f</SetVariable>
-            <SetVariable name="state_0_text">Tick</SetVariable>
-            <SetVariable name="ConfigKey">[MidiClockOut],tick</SetVariable>
+            <SetVariable name="state_0_text">Test</SetVariable>
+            <SetVariable name="ConfigKey">[MidiClockOut],test</SetVariable>
           </Template>                  
           
           <Label>
             <ObjectName>MidiClockLabel</ObjectName>
-            <TooltipId>midiclock_usage</TooltipId>
+            <Tooltip>Midi Clock Out, outputs 0xF8 ticks</Tooltip>
             <Size>0min,10f</Size>
             <Alignment>center</Alignment>
             <Text> MIDI Clock </Text>
@@ -244,7 +250,7 @@
             <SetVariable name="ConfigKey">[AbletonLink],sync_enabled</SetVariable>
           </Template>
           <Number>
-            <TooltipId>num_peers</TooltipId>
+            <Tooltip>num_peers</Tooltip>
             <ObjectName>AbletonLinkPeers</ObjectName>
             <Size>25f,0min</Size>
             <NumberOfDigits>0</NumberOfDigits>

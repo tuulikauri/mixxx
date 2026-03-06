@@ -766,6 +766,10 @@ void CoreServices::initialize(QApplication* pApp) {
 
     ControllerScriptEngineBase::registerPlayerManager(getPlayerManager());
 
+    qDebug() << "Making Midi Clock Out connections in CoreServices";
+    connect(m_pControllerManager.get(), &ControllerManager::foundMidiClockOut, m_pEngine.get(), &EngineMixer::slotFoundMidiClockOut, Qt::QueuedConnection);
+    connect(m_pControllerManager.get(), &ControllerManager::deleteMidiClockOut, m_pEngine.get(), &EngineMixer::slotDeleteMidiClockOut, Qt::QueuedConnection);
+    
 #ifdef MIXXX_USE_QML
     initializeQMLSingletons();
 }

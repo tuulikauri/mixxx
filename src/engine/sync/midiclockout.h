@@ -1,224 +1,198 @@
 #pragma once
 #include <ableton/platforms/stl/Clock.hpp>
-
 #include <chrono>
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0) 
-#include <QChronoTimer> 
-//using QChronoTimerType = QChronoTimer; 
-using timerDurationType = std::chrono::nanoseconds;
-#else 
-#include <QTimer> 
-//using QChronoTimerType = QTimer; 
-using timerDurationType = std::chrono::milliseconds;
-#endif
-
 #include "control/controlpushbutton.h"
+#include "controllers/controller.h"
 #include "engine/channels/enginechannel.h"
 #include "engine/enginebuffer.h"
+#include "engine/sync/midiclockoutthread.h"
 #include "engine/sync/syncable.h"
 #include "engine/sync/synccontrol.h"
 
-/// This class manages a Midi clock output (0xF8)
-/// Object is initialized in EngineSync constructor
-/// @sa EngineSync.h
+/// This class manages a Midi clock output (0xF8, 0xFA, 0xFB, 0xFC)
 
-//or std::chrono::microseconds?
-//using MixxxClockRef = std::chrono::steady_clock; 
-using MixxxClockRef = ableton::platforms::stl::Clock;
+/// This class manages a Midi clock output (0xF8). It prioritizes maintaining the
+/// user-selected beat_distance, so the external sequencers are aligned to the beat
+/// grid in Mixxx.
+/// Object is initialized in EngineSync constructor
+/// Inputs: GUI buttons; sync-leader tempo or sync events
+/// Outputs: Clock ticks, start, stop, continue
+/// Processing:
+/// Sync events (GUI ENABLE, GUI RESTART, GUI NUDGE) and Syncable::updateLeaderBeatDistance
+/// - RESTART sets the beats to 1:1:1 (and keeps playing if its playing) 0xFA, or 0xFC 0xFA
+/// - ENABLE starts the clock (and does not reset the beats) 0xFB, or 0xFA
+/// - Both align the current time_point with the current beat-position-offset
+/// (through the tick_count), and store the time_point for future. As ticks
+/// progress, that time_point is always referenced together with the tick_count
+/// and the tempo_interval between ticks.
+/// - NUDGE commands move the beat-position-offset a small amount, and store it for future.
+/// - beat-position-offset adjustments are done by adjusting the tick_count
+/// and outputting extra 0xF8 ticks, or skipping 0xF8 output.
+/// - Syncable::updateLeaderBeatDistance maintains current beat-position offset
+/// to the track by adjusting the tick_count to align with the new beat_distance,
+/// and then issuing a beat-position-offset adjustment.
+///
+/// Tempo events Syncable::updateLeaderBpm, which also causes sync errors
+/// - Updates the tempo_interval between ticks
+/// - Accounts for the non-realtime nature of receiving tempo changes by adjusting
+/// time_points for ticks to maintain sync-lock. Currently this seems hacky and
+/// excessive, it would be better to request the Leader's beat-position and then
+/// move the beat-position-offset to the offset that was set with the sync GUI.
+///
+/// @sa EngineSync
+/// @sa AbletonLink
+/// @sa MidiClockOutThread
+/// @dot
+/// digraph {
+/// splines=polyline;
+/// label = "MidiClockOut Logic";
+/// tooltop = "Error-correction logic for MidiClockOut";
+/// node[fontsize=10 shape=Mrecord];
+/// edge[fontsize=10];
+/// LISTENING [tooltip = "not playing, but tracking sync and tempo"];
+/// RUNNING [tooltip = "clock is running, 0xF8 ticks"];
+///
+/// LISTENING->RUNNING[label = "enable"];
+/// RUNNING->ONBEAT[label = "enable"];
+/// RUNNING->LISTENING[label = "disable"];
+/// subgraph running_graph {
+/// ONBEAT [tooltip = "clock is running onbeat"];
+/// OFFBEAT [tooltip = "clock is undesirably offbeat"];
+///
+/// ONBEAT->OFFBEAT[label = "drift" labeltooltip = "clock drift from non-realtime OS performance"];
+/// ONBEAT->OFFBEAT[label = "tempo" labeltooltip = "mid-tick tempo change, or short instantaneous tempo change"];
+/// ONBEAT->OFFBEAT[label = "beatjump" labeltooltip = "beatjump" ];
+/// ONBEAT->OFFBEAT[label = "scratch" labeltooltip = "scratching" ];
+///
+/// OFFBEAT->ONBEAT[label = "drift fix" labeltooltip = "automatic clock drift correction"];
+/// OFFBEAT->ONBEAT[label = "beatjump fix" labeltooltip = "automatic clock beatjump correction"];
+/// OFFBEAT->PENDINGFIX[label = "auto-request" labeltooltip = "clock requests beatDistance"];
+/// PENDINGFIX->ONBEAT[label = "leader" labeltooltip = "leader sends beatDistance"];
+/// OFFBEAT->ONBEAT[label = "restart" labeltooltip = "DJ restarts"];
+/// OFFBEAT->ONBEAT[label = "nudge" labeltooltip = "DJ nudges phase"];
+/// }
+/// }
+/// @enddot
+
+// TODO(Tuuli): is something like this needed?
+// using MixxxClockRef = ableton::platforms::stl::Clock;
 
 class MidiClockOut : public QObject, public Syncable {
-  Q_OBJECT
+    Q_OBJECT
   public:
     MidiClockOut(const QString& group, EngineSync* pEngineSync);
     ~MidiClockOut() override;
-
     const QString& getGroup() const override {
         return m_group;
     }
     EngineChannel* getChannel() const override {
         return nullptr;
     }
-   
-
     /// Notify a Syncable that their mode has changed. The Syncable must record
     /// this mode and return the latest mode in response to getMode().
     void setSyncMode(SyncMode mode) override;
-
     /// Notify a Syncable that it is now the only currently-playing syncable.
     void notifyUniquePlaying() override;
-
     /// Notify a Syncable that they should sync phase.
     void requestSync() override;
-
     /// Must NEVER return a mode that was not set directly via
     /// notifySyncModeChanged.
     SyncMode getSyncMode() const override;
-
     /// Only relevant for player Syncables.
     bool isPlaying() const override;
     bool isAudible() const override;
     bool isQuantized() const override;
-
     /// Gets the current speed of the syncable in bpm (bpm * rate slider), doesn't
     /// include scratch or FF/REW values.
     mixxx::Bpm getBpm() const override;
-
-    
     /// Gets the beat distance as a fraction from 0 to 1
     double getBeatDistance() const override;
-
     /// Gets the speed of the syncable if it was playing at 1.0 rate.
     mixxx::Bpm getBaseBpm() const override;
-
-    /// The following functions are used to tell syncables about the state of the
-    /// current Sync Master.
-    /// Must never result in a call to
-    /// SyncableListener::notifyBeatDistanceChanged or signal loops could occur.
+    /// The following functions are used to tell syncables about the state of the current Sync Master.
+    
+    /// Must never result in a call to SyncableListener::notifyBeatDistanceChanged or signal loops could occur.
     void updateLeaderBeatDistance(double beatDistance) override;
-
     /// Enforces the immediate change of the beat distance
     void forceUpdateLeaderBeatDistance(double beatDistance);
-
-    /// Must never result in a call to SyncableListener::notifyBpmChanged or
-    /// signal loops could occur.
+    /// @brief Update from [EngineSync]
+    /// @details Also called from reinitLeaderParams updateInstantaneousBpm. Must never result in a call to SyncableListener::notifyBpmChanged or signal loops could occur.
     void updateLeaderBpm(mixxx::Bpm bpm) override;
-
     void notifyLeaderParamSource() override;
-
     /// Combines the above three calls into one, since they are often set
-    /// simultaneously.  Avoids redundant recalculation that would occur by
+    /// simultaneously. Avoids redundant recalculation that would occur by
     /// using the three calls separately.
     void reinitLeaderParams(double beatDistance, mixxx::Bpm baseBpm, mixxx::Bpm bpm) override;
-
-    /// Must never result in a call to
-    /// SyncableListener::notifyInstantaneousBpmChanged or signal loops could
-    /// occur.
+    /// Must never result in a call to SyncableListener::notifyInstantaneousBpmChanged 
+    /// or signal loops could occur.
     void updateInstantaneousBpm(mixxx::Bpm bpm) override;
-
     void onCallbackStart(std::chrono::microseconds absTimeWhenPrevOutputBufferReachesDac);
     void onCallbackEnd(int sampleRate, size_t bufferSize);
 
-    void testMessage();
+    void setMidiClockOutController(Controller* pMidiClockOutController); ///< Sets the controller mapped to "Midi Clock Out"; triggered when a signal is emitted to EngineMixer from the ControllerManager
+    void deleteMidiClockOutController();                                 ///< Cleans up to avoid dangling pointers; triggered from ControllerManager during shutdown
 
-    
-    void backSixteenth();
-    void fwdSixteenth();
-
-
-  signals:
-    void clockTick(double value, QObject* pSender);
-    void clockStart(double value, QObject* pSender);
-    void clockContinue(double value, QObject* pSender);
-    void clockStop(double value, QObject* pSender);
-
-  
-  private slots:    
-    void tick();
-    //void debugTestAllTheTimers(double controlButtonValue);
+  private slots:
+    void tickGui(int32_t syncTicks); ///< Advances the bars:beats:sixteenths syncTicks+1 times forward in the GUI. Should be used to match the beat position of an external sequencer. Should not tick for skipped or failed ticks, only when a tick is sent to external sequencers.
 
     void slotControlOutEnabled(double controlButtonValue);
     void slotControlRestart(double controlButtonValue);
-    void slotControlTick(double controlButtonValue);
+    void slotControlTest(double controlButtonValue);
     void slotControlNudgeFwd(double controlButtonValue);
     void slotControlNudgeBack(double controlButtonValue);
 
   private:
     // ableton::link::HostTimeFilter<MixxxClockRef> m_hostTimeFilter;
+    QString m_group;           ///< String for MidiClockOut in debug and controller, control object access
+    EngineSync* m_pEngineSync; ///< Unowned, must outlive this class
+    SyncMode m_syncMode;       ///< Syncables mode; either Follower or None or Invalid
 
-    QString m_group;
-    EngineSync* m_pEngineSync; // unowned, must outlive this.
-    SyncMode m_syncMode;
-
-    mixxx::Bpm m_oldTempo;
-    mixxx::Bpm m_currentBpm;
-    mixxx::Bpm m_newBpm;
-    //double m_dnewBpm;
-
+    mixxx::Bpm m_currentBpm; ///< Latest BPM set by the Leader; mixxx::bpm supports 0 to 500 tempo range
 
     std::chrono::microseconds m_absTimeWhenPrevOutputBufferReachesDac;
-    std::chrono::microseconds m_nextTickTime; //?
-    std::chrono::microseconds m_plannedNextTickTime; //?
-    std::chrono::microseconds m_newNextTickTime; //?
-    std::chrono::microseconds m_differenceTickLength; //?
 
-    std::chrono::microseconds m_timeReceivedNewLeaderBpm; ///< For calculating next timestamp with the new interval    
-    std::chrono::microseconds m_timeReceivedNewLeaderBpmLate; //?    
-    std::chrono::microseconds m_maximumNextTickCutoffTime; //?
-    
+    bool m_enabled; ///< Enable or disable timing MidiClockOut ticks
+    bool m_uniquePlaying; ///< Track if it's the only playing syncable; follows sync jumps from updateLeaderBeatDistance is this is false, ie another leader is playing
 
-    std::chrono::microseconds tickLengthFromBpm(double bpm);
-    std::chrono::microseconds m_currentTickLength;
-    std::chrono::microseconds m_newTickLength;
-    std::chrono::microseconds m_tickCutOff;    
-    std::chrono::nanoseconds m_intervalLength;
+    /// 24PPQN ticks
+    uint32_t m_tickCount; ///< Number of ticks (24 PPQN)
+    uint8_t m_sixteenths; ///< Number of sixteenth notes (4 PPQN)
+    uint8_t m_beats;      ///< Number of beats (1 PPQN)
+    uint32_t m_bars;      ///< Number of bars; 4 beats per bar
+    // TODO(Tuuli): add a setting to change the meter from 4/4
 
-    mixxx::audio::FramePos m_beatDistance; //?
+    // Sync
+    void restart();       ///< Restart all tick counters, all bpm adjusters, and the tick clock (if its running)
+    void resetGui();      ///< Resets the GUI sixteenths, beats, bars to 1,1,1
+    void backSixteenth(); ///< Move external device back 6 ticks
+    void fwdSixteenth();  ///< Move external device forward 6 ticks
 
-    bool m_enabled;   
+    void forceGetBeatDistance(); ///< 
 
-    /// 24PPQN ticks     
-    uint32_t m_tickCount;
-    uint8_t m_sixteenths;
-    uint8_t m_beats;
-    uint32_t m_bars;
+    // MIDI
+    bool sendDirectRTMidi(uint8_t status); ///< Sends 3 byte {status, 00, 00} to m_pMidiClockOutController
 
-    bool mflag_plannedTickWillBeLate; //?
-    bool mflag_useNewInsteadOfPlannedTickTime; //?
-    bool mflag_bpmChangedThisBar;
+    void sendMidiClockTick();     ///< Sends 0xF8 to portMidi device with midi_clock_out script mapped
+    void sendMidiClockStart();    ///< Sends 0xFA to portMidi device with midi_clock_out script mapped
+    void sendMidiClockContinue(); ///< Sends 0xFB to portMidi device with midi_clock_out script mapped
+    void sendMidiClockStop();     ///< Sends 0xFC to portMidi device with midi_clock_out script mapped
 
-    int32_t m_tickError;
-    uint32_t m_ticksSinceBpmChange; ///< Counter to use with m_timeReceivedNewLeaderBpm to calculate timepoints
+    Controller* m_pMidiClockOutController = nullptr; ///< Unowned pointer to the Controller that is linked to Midi Clock Out mapping
+    std::unique_ptr<MidiClockOutThread> m_pMidiClockOutThread; ///< Thread for timing and Midi out
 
-    bool m_skipNextTick;    
-
-        // QChronoTimerType m_ticknsTimer = QChronoTimerType(nullptr);
-    // QChronoTimerType m_debugTimer = QChronoTimerType(nullptr);
-
-    #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
-    QChronoTimer m_ticknsTimer = QChronoTimer(nullptr);
-    QChronoTimer m_debugTimer = QChronoTimer(nullptr);
-    #else
-    QTimer m_ticknsTimer = QTimer(nullptr);
-    QTimer m_debugTimer = QTimer(nullptr);
-    #endif
-
-    Qt::TimerId m_ticknsTimerID;
-
-    void skipTick();
-
-    //Restart all tick counters, all bpm adjusters, and the tick clock (if its running)
-    void restart();
-
-    void sendMidiClockTick(); ///< Sends 0xF8 to portMidi device
-    void sendMidiClockStart(); ///< Sends 0xFA to portMidi device
-    void sendMidiClockContinue(); ///< Sends 0xFB to portMidi device
-    void sendMidiClockStop(); ///< Sends 0xFC to portMidi device
-
-    //Debug 
-    std::chrono::microseconds m_barLengthMeasured;
-    std::chrono::microseconds m_barLengthError;
-    std::chrono::steady_clock::time_point m_startTime;
-    std::chrono::steady_clock::time_point m_endTime;
-    uint32_t m_debugTickCounter;
-
-    //Control objects
+    // Control objects
     std::unique_ptr<ControlPushButton> m_pMidiClockEnableButton;
     std::unique_ptr<ControlPushButton> m_pMidiClockRestartButton;
-    std::unique_ptr<ControlPushButton> m_pMidiClockTickButton;
     std::unique_ptr<ControlPushButton> m_pMidiClockNudgeFwdButton;
     std::unique_ptr<ControlPushButton> m_pMidiClockNudgeBackButton;
+    std::unique_ptr<ControlPushButton> m_pMidiClockTestButton;
     std::unique_ptr<ControlObject> m_pMidiClockPosSixteenths;
     std::unique_ptr<ControlObject> m_pMidiClockPosBeats;
     std::unique_ptr<ControlObject> m_pMidiClockPosBars;
 
-    std::unique_ptr<ControlObject> m_pMidiClockTick;
-    std::unique_ptr<ControlObject> m_pMidiClockStart;
-    std::unique_ptr<ControlObject> m_pMidiClockContinue;
-    std::unique_ptr<ControlObject> m_pMidiClockStop;
-
     std::chrono::microseconds getHostTime() const;
     std::chrono::microseconds getHostTimeAtSpeaker(std::chrono::microseconds hostTime) const;
-    void debugBarTime();
-    
-    };
+
+    friend class MidiClockOutThread;
+};
