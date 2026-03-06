@@ -44,15 +44,16 @@ MidiClockOutThread::~MidiClockOutThread() {
     qDebug() << "MidiClockOutThread::done ";
 }
 void MidiClockOutThread::startMidiClockOutThread() {
+    qDebug() << "MidiClockOutThread::startMidiClockOutThread()";
     QMutexLocker locker(&mutex);
     if (!isRunning()) {
         // m_startTime = std::chrono::steady_clock::now();
         start(QThread::HighestPriority);
     } else
         cond.wakeOne();
-    qDebug() << "MidiClockOutThread::startMidiClockOutThread";
 }
 void MidiClockOutThread::stopThreadAndWait() {
+    qDebug() << "MidiClockOutThread::stopThreadAndWait()";
     mutex.lock();
     stopplz = true;
     mutex.unlock();
@@ -124,9 +125,11 @@ bool MidiClockOutThread::sendDirectRTMidi(uint8_t status) {
     return false;
 }
 void MidiClockOutThread::setMidiClockOutController(Controller* pMidiClockOutController) {
+    qDebug() << "MidiClockOutThread::setMidiClockOutController()";
     m_pMidiClockOutController = pMidiClockOutController; ///< Duplicate unowned pointer to the Controller that is linked to Midi Clock Out mapping
 }
 void MidiClockOutThread::deleteMidiClockOutController() {
+    qDebug() << "MidiClockOutThread::deleteMidiClockOutController()";
     m_pMidiClockOutController = nullptr;
 }
 
