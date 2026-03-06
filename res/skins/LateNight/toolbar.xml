@@ -218,8 +218,8 @@
             <SetVariable name="TooltipId">sync_enabled</SetVariable>
             <SetVariable name="ObjectName">GuiToggleButton</SetVariable>
             <SetVariable name="Size">35f,20f</SetVariable>
-            <SetVariable name="state_0_text">Tick</SetVariable>
-            <SetVariable name="ConfigKey">[MidiClockOut],tick</SetVariable>
+            <SetVariable name="state_0_text">Test</SetVariable>
+            <SetVariable name="ConfigKey">[MidiClockOut],test</SetVariable>
           </Template>                  
           
           <Label>

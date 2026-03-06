@@ -39,7 +39,7 @@ public:
     ~MidiClockOutThread();
     /// @brief called from [main]    
     void startMidiClockOutThread();
-    void stopPlease();
+    void stopThreadAndWait();
     void testuSleepLength();
 
     /// Midi

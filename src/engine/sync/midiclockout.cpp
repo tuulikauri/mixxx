@@ -16,6 +16,13 @@
 // TODO(Tuuli) Sequence is vital for MIDI messages; make sure they are never sent out of order. How is this handled? Start-Stop is very different outcome from Stop-Start. Events are always delivered in-order by Qt.
 // TODO(XXX) Fix the PortMidiController::sendBytes or Controller MIDI message parser? Is Arduinos MIDI.h open-source compatible with Mixxx, can we use that? Controller::sendBytes doesnt work for non-sysex Midi messages and assumes all messages are sysex... but its the only inherited MIDI sending function that exists in the Controller class. Currently hacked to allow F8, FA, FB, FC
 
+// TODO(Tuuli) Sync. 
+// - should MidiClockOut be one of EngineSync::m_syncables? Probably not; m_syncables is used to choose sync leaders
+// - beatDistance isnt as simple as I thought. For now MCO doesnt follow since it doesnt make sense to follow it until it's decoded [For example it sends a beatDistance of 3 or -3 for beatjumps of 4; and 2 and 1 beatjump sizes are not distinguishable once they reach updateLeaderBeatDistance(beatDistance)]
+// - review logic in updateLeaderBeatDistance and EngineSync::reinitLeaderParams and how MidiClockOut::m_enabled and MidiClockOut::m_uniquePlaying is set and used. 
+// -- Decks might be: Playing, Not playing, Sync-followed, Sync-leader.
+// -- Controls might be: Start, stop, cuepoint, beatjump, loop
+
 // TODO(Tuuli): Send Continue FB on Enable without a stop; check if Stop-Start is best approach for restart, or if just Start will be sufficient as a default. Add settings option to enable Continue messages for users to choose what their sequencers receive
  
 // TODO(Tuuli): MidiClockOut should be controllable if its the only item playing.
@@ -23,7 +30,7 @@
     // BUT... how to change tempo now? To drive external synths?
     
     // Could have a deck's tempo-fader mapped, and grab the last clock leaders
-    // fader to now control the MIDI Clock.
+    // fader to now control the MIDI Clock. EngineSync::updateLeaderBpm is triggered by stopped Leader decks, and fwds the bpm to MidiClockOut, this seems desireable
      
     // We could have a pre-programmed switch-over to internal clock (SYSEX)
     // and midi.setTempo() to the current tempo as a fall-back, so that 
@@ -84,6 +91,7 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
           m_absTimeWhenPrevOutputBufferReachesDac(0),
 
           m_enabled(false),
+          m_uniquePlaying(true),
           m_tickCount(0),
           m_sixteenths(1),
           m_beats(1),
@@ -93,9 +101,9 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
           // GUI objects
           m_pMidiClockEnableButton(std::make_unique<ControlPushButton>(ConfigKey(group, "out_enabled"))),
           m_pMidiClockRestartButton(std::make_unique<ControlPushButton>(ConfigKey(group, "restart"))),
-          m_pMidiClockTickButton(std::make_unique<ControlPushButton>(ConfigKey(group, "tick"))),
           m_pMidiClockNudgeFwdButton(std::make_unique<ControlPushButton>(ConfigKey(group, "nudge_fwd"))),
           m_pMidiClockNudgeBackButton(std::make_unique<ControlPushButton>(ConfigKey(group, "nudge_back"))),
+          m_pMidiClockTestButton(std::make_unique<ControlPushButton>(ConfigKey(group, "test"))),
           m_pMidiClockPosSixteenths(std::make_unique<ControlObject>(ConfigKey(group, "num_sixteenths"))),
           m_pMidiClockPosBeats(std::make_unique<ControlObject>(ConfigKey(group, "num_beats"))),
           m_pMidiClockPosBars(std::make_unique<ControlObject>(ConfigKey(group, "num_bars"))) {
@@ -115,13 +123,6 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
             this,
             &MidiClockOut::slotControlRestart);
 
-    m_pMidiClockTickButton->setButtonMode(mixxx::control::ButtonMode::Trigger);
-    m_pMidiClockTickButton->setStates(1);
-    QObject::connect(m_pMidiClockTickButton.get(),
-            &ControlObject::valueChanged,
-            this,
-            &MidiClockOut::slotControlTick);
-
     m_pMidiClockNudgeFwdButton->setButtonMode(mixxx::control::ButtonMode::Trigger);
     m_pMidiClockNudgeFwdButton->setStates(1);
     QObject::connect(m_pMidiClockNudgeFwdButton.get(),
@@ -135,6 +136,13 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
             &ControlObject::valueChanged,
             this,
             &MidiClockOut::slotControlNudgeBack);
+
+    m_pMidiClockTestButton->setButtonMode(mixxx::control::ButtonMode::Trigger);
+    m_pMidiClockTestButton->setStates(1);
+    QObject::connect(m_pMidiClockTestButton.get(),
+            &ControlObject::valueChanged,
+            this,
+            &MidiClockOut::slotControlTest);
 
     m_pMidiClockPosSixteenths->setReadOnly();
     m_pMidiClockPosSixteenths->forceSet(m_sixteenths);
@@ -177,13 +185,6 @@ MidiClockOut::~MidiClockOut() {
                 &MidiClockOut::slotControlRestart);
     }
 
-    if (m_pMidiClockTickButton) {
-        QObject::disconnect(m_pMidiClockTickButton.get(),
-                &ControlObject::valueChanged,
-                this,
-                &MidiClockOut::slotControlTick);
-    }
-
     if (m_pMidiClockNudgeFwdButton) {
         QObject::disconnect(m_pMidiClockNudgeFwdButton.get(),
                 &ControlObject::valueChanged,
@@ -198,15 +199,22 @@ MidiClockOut::~MidiClockOut() {
                 &MidiClockOut::slotControlNudgeBack);
     }
 
+    if (m_pMidiClockTestButton) {
+        QObject::disconnect(m_pMidiClockTestButton.get(),
+                &ControlObject::valueChanged,
+                this,
+                &MidiClockOut::slotControlTest);
+    }
+
     // Destroy control objects before releasing MidiClockOut
-    m_pMidiClockOutThread->stopPlease();
+    m_pMidiClockOutThread->stopThreadAndWait();
     qDebug() << "MidiClockOut::destructor: Asked MidiClockOutThread to stop";
 
     m_pMidiClockEnableButton.reset();
     m_pMidiClockRestartButton.reset();
-    m_pMidiClockTickButton.reset();
     m_pMidiClockNudgeFwdButton.reset();
     m_pMidiClockNudgeBackButton.reset();
+    m_pMidiClockTestButton.reset();
 
     m_pMidiClockPosSixteenths.reset();
     m_pMidiClockPosBeats.reset();
@@ -236,12 +244,12 @@ void MidiClockOut::slotControlOutEnabled(double controlButtonValue) {
     m_pMidiClockOutThread->setBeatClockState(m_enabled);
 
     if (m_enabled) {
-        sendMidiClockStart();
-        m_pEngineSync->requestSyncMode(this, SyncMode::Follower);
-        //m_pEngineSync->notifyPlayingAudible(this, true); // TODO(Tuuli): is this required? Will we get the leaders tempo if we're audible?
+        sendMidiClockContinue(); // TODO(Tuuli) Setting for this to be start or continue
+        m_pEngineSync->requestSyncMode(this, SyncMode::Follower); /// also queues reinitLeaderParams()
+        //m_pEngineSync->notifyPlayingAudible(this, true); // TODO(Tuuli): is this required? What does being audible affect for sync info?
     } else {
-        sendMidiClockStop();
-        m_pEngineSync->requestSyncMode(this, SyncMode::None);
+        sendMidiClockStop(); // TODO(Tuuli) Setting for this to be stop, or not sent
+        m_pEngineSync->requestSyncMode(this, SyncMode::None); // TODO(Tuuli): Does this do anything? It seems to only trigger reinitLeaderParams but not accept the request for "none" mode; instead sends back "Follower" via setSyncMode()
         //m_pEngineSync->notifyPlayingAudible(this, false);
     }
 }
@@ -249,14 +257,15 @@ void MidiClockOut::slotControlOutEnabled(double controlButtonValue) {
 void MidiClockOut::slotControlRestart(double controlButtonValue) {
     Q_UNUSED(controlButtonValue)
     qDebug() << "MidiClockOut::slotControlRestart()";
-    forceGetBeatDistance(); /// Ask for the beatDistance from the leader at the moment of user restarting MidiClockOut; does nothing
+    forceGetBeatDistance(); /// Ask for the beatDistance from the leader at the moment of user restarting MidiClockOut
     restart();
 }
 
-void MidiClockOut::slotControlTick(double controlButtonValue) {
+void MidiClockOut::slotControlTest(double controlButtonValue) {
     Q_UNUSED(controlButtonValue)
-    qDebug() << "MidiClockOut::slotControlTick";
-    sendMidiClockTick();
+    qWarning() << "DEBUG: MidiClockOut::slotControlTest" << m_syncMode;
+    //sendMidiClockTick();
+    m_pEngineSync->requestSyncMode(this, SyncMode::Follower); // triggers a leader to send updateLeaderSyncDistance and reinitLeaderParameters();
 }
 
 void MidiClockOut::slotControlNudgeFwd(double controlButtonValue) {
@@ -279,9 +288,10 @@ void MidiClockOut::setSyncMode(SyncMode syncMode) {
 }
 /// Notify a Syncable that it is now the only currently-playing syncable.
 void MidiClockOut::notifyUniquePlaying() {
-    qDebug() << "MidiClockOut::notifyUniquePlaying()";
+    qWarning() << "MidiClockOut::notifyUniquePlaying() Solo";
+    m_uniquePlaying = true;
 }
-/// Notify a Syncable that they should sync phase.
+/// Notify a Syncable that they should sync phase; called after reinitLeaderParameters when a MidiClockOut requests Follower
 void MidiClockOut::requestSync() {
     // updateLeaderBeatDistance(double beatDistance) handles the sync position update.
     //
@@ -296,6 +306,8 @@ void MidiClockOut::requestSync() {
     // reinitLeaderParams(pParamsSyncable);
     // pSyncable->updateInstantaneousBpm(pParamsSyncable->getBpm());
     // if (pParamsSyncable != pSyncable && mode != SyncMode::None) pSyncable->requestSync();
+    
+    qDebug() << "MidiClockOut::requestSync() ";
 }
 /// Must NEVER return a mode that was not set directly via
 /// notifySyncModeChanged.
@@ -316,7 +328,7 @@ bool MidiClockOut::isQuantized() const {
 mixxx::Bpm MidiClockOut::getBpm() const {
     return m_currentBpm;
 }
-double MidiClockOut::getBeatDistance() const {        
+double MidiClockOut::getBeatDistance() const {
     auto beatPosition = m_pMidiClockOutThread->getBeatPosAt(std::chrono::steady_clock::now());
     double wholeBeats;
     auto partialBeats = modf(beatPosition, &wholeBeats);
@@ -331,9 +343,10 @@ void MidiClockOut::updateLeaderBeatDistance(double beatDistance) {
     qDebug() << "MidiClockOut::updateLeaderBeatDistance()" << beatDistance;
     // TODO(Tuuli) add a setting or control for toggling following sync changes
     // TODO(Tuuli) We dont store the desired offset between the tick position, and the music's beatDistance; need to get the live Leader_beatDistance at the time of a GUI enable or restart command? Desired offset is the beat 1 location when the DJ sets it... we can probably figure this out / track those intentional "set beat 1 NOW" interaction with MidiClockOut vs the DJ beatjumping the decks...
+    // TODO(Tuuli) Is there a way to know if the leader track is playing or not? This gets sent from both playing and non-playing tracks.. for beatjumps and cue point jumps. We dont want to sync a playing synth to track positions that arent playing. Created bool sourceIsPlaying in EngineSync::reinitLeaderParams for this, so updateLeaderBeatDistance() does not get sent unless a deck is leader (or could also allow AbletonLink::isPlaying(), once the bpm in EngineSync::reinitLeaderParams also comes from AbletonLink)
 
-    /// When the leader moves the beatDistance, follow and queue up a tickSyncAdjustment if the clock is enabled
-    if (m_enabled) {
+    /// When a deck moves the beatDistance, follow and queue up a tickSyncAdjustment if the clock is enabled. Only follow sync beatDistance if there is another deck playing; assume the params come from that playing deck
+    if (m_enabled && !m_uniquePlaying) {
         auto threadSyncOffset = m_pMidiClockOutThread->setBeatPosFromBeatDistanceAt(std::chrono::steady_clock::now(), beatDistance);
         m_pMidiClockOutThread->addPendingSyncAdjustment(threadSyncOffset); // TODO(Tuuli) Add a sync-follow setting
     }
@@ -346,10 +359,15 @@ void MidiClockOut::forceUpdateLeaderBeatDistance(double beatDistance) {
 
 // SyncControl::slotRateChanged() (Syncable leader's synccontrol) calls m_pEngineSync->notifyRateChanged(this, bpm / m_leaderBpmAdjustFactor);
 // EngineSync::notifyRateChanged calls EngineSync::updateLeaderBpm(pSyncable source, bpm);
-//  TODO(Tuuli): should MidiClockOut be one of EngineSync::m_syncables? Probably not; m_syncables is used to choose sync leaders
 void MidiClockOut::updateLeaderBpm(mixxx::Bpm bpm) {
-    qDebug() << "MidiClockOut::updateLeaderBpm()" << bpm.value();
-    handleNewBPM(bpm);
+    qWarning() << "DEBUG: MidiClockOut::updateLeaderBpm() " << bpm.value();
+    auto timeNow = std::chrono::steady_clock::now();
+
+    if (bpm.compareEq(m_currentBpm) || !(bpm.isReasonable())) {
+        return;
+    }
+    m_currentBpm = bpm;
+    auto beatPos = m_pMidiClockOutThread->setBeatTempoAt(timeNow, bpm.value());
 }
 
 // TODO(Tuuli): Do we need to anything here?
@@ -358,6 +376,31 @@ void MidiClockOut::notifyLeaderParamSource() {
 }
 
 void MidiClockOut::reinitLeaderParams(double beatDistance, mixxx::Bpm, mixxx::Bpm bpm) {
+    // Only follow beatDistance if another deck is playing
+    Syncable* pSyncTarget = nullptr;
+    pSyncTarget = m_pEngineSync->pickNonSyncSyncTarget(nullptr); // the leader (playing or stopped), or a playing synced deck, or a non-synced playing deck
+    if (pSyncTarget) {
+        if (!pSyncTarget->isPlaying()) { // pSyncTarget->isSynchronized()
+            if (isLeader(pSyncTarget->getSyncMode())) {
+                pSyncTarget = m_pEngineSync->pickNonSyncSyncTarget(pSyncTarget->getChannel()); // try again, excluding the leader
+                if (pSyncTarget) {
+                    if (!pSyncTarget->isPlaying()) {
+                        pSyncTarget = nullptr; // non-playing; no other deck
+                    }
+                }
+            } else {
+                pSyncTarget = nullptr; // non-playing and not the leader; no other deck
+            }
+        }
+    }
+    if (pSyncTarget) {
+        m_uniquePlaying = false; // Set this as false when there is a sync deck playing playing, so we know if updateLeaderBeatDistance info is from a playing deck
+        qWarning() << "DEBUG: MidiClockOut::reinitLeaderParams found another playing target " << pSyncTarget->getGroup();
+    } else {
+        m_uniquePlaying = true; 
+        qWarning() << "DEBUG: MidiClockOut::reinitLeaderParams Solo";
+    }
+
     updateLeaderBeatDistance(beatDistance);
     updateLeaderBpm(bpm);
 }
@@ -371,8 +414,9 @@ void MidiClockOut::updateInstantaneousBpm(mixxx::Bpm bpm) {
 
 void MidiClockOut::forceGetBeatDistance() {
     // TODO(Tuuli): Can we safely ask for the current beatDistance? Does requestSync() trigger updateLeaderBeatDistance() calls if the requestSync() results in a beatDistance change?
-    // TODO(Tuuli): Is this the correct way to get the leaders phase? Syncable::getBaseBpm() and m_pEngineSync->pickNonSyncSyncTarget() ...getEngineBuffer has a comment to remove it as its a hack. Replace with?
-    // EngineChannel* pLeaderChannel = m_pEngineSync->getLeaderChannel();
+    // TODO(Tuuli): Is there another / correct way to get the leaders phase? Syncable::getBaseBpm() and m_pEngineSync->pickNonSyncSyncTarget() ...getEngineBuffer has a comment to remove it as its a hack. Replace with?
+    // EngineChannel* pLeaderChannel = m_pEngineSync->getLeaderChannel(); 
+    // bool leaderActive = pLeaderChannel->isActive();
     // newBeatDistance = pLeaderChannel->getEngineBuffer()->getExactPlayPos();
 
     // BpmControl::calcSyncAdjustment handles sync.
@@ -380,6 +424,8 @@ void MidiClockOut::forceGetBeatDistance() {
     // BpmControl::setTargetBeatDistance sets the value;
     // called from SyncControl::updateTargetBeatDistance
     // called from EngineBuffer::postProcess; and called from SyncControl::updateLeaderBeatDistance
+
+    m_pEngineSync->requestSyncMode(this, SyncMode::Follower);
 }
 
 void MidiClockOut::restart() {
@@ -421,21 +467,6 @@ void MidiClockOut::sendMidiClockContinue() {
 void MidiClockOut::sendMidiClockStop() {    
     sendDirectRTMidi((uint8_t)0xFC);
     //qDebug() << "MidiClockOut::sendMidiClockStop() (0xFC to portMidi)";
-}
-
-/// @brief Update in the [EngineSync] thread when the BPM is available
-/// @details Called by:
-/// updateLeaderBpm(mixxx::Bpm bpm);
-/// also called from reinitLeaderParams updateInstantaneousBpm
-void MidiClockOut::handleNewBPM(mixxx::Bpm newBpm) {
-    auto timeNow = std::chrono::steady_clock::now();
-
-    if (newBpm.compareEq(m_currentBpm) || !(newBpm.isReasonable())) {
-        return;
-    }
-    qDebug() << "MidiClockOut::handleNewBPM()" << newBpm;
-    m_currentBpm = newBpm;
-    auto beatPos = m_pMidiClockOutThread->setBeatTempoAt(timeNow, newBpm.value());
 }
 
 void MidiClockOut::tickGui(int32_t syncTicks) {

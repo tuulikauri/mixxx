@@ -110,24 +110,22 @@ class MidiClockOut : public QObject, public Syncable {
     double getBeatDistance() const override;
     /// Gets the speed of the syncable if it was playing at 1.0 rate.
     mixxx::Bpm getBaseBpm() const override;
-    /// The following functions are used to tell syncables about the state of the
-    /// current Sync Master.
-    /// Must never result in a call to
-    /// SyncableListener::notifyBeatDistanceChanged or signal loops could occur.
+    /// The following functions are used to tell syncables about the state of the current Sync Master.
+    
+    /// Must never result in a call to SyncableListener::notifyBeatDistanceChanged or signal loops could occur.
     void updateLeaderBeatDistance(double beatDistance) override;
     /// Enforces the immediate change of the beat distance
     void forceUpdateLeaderBeatDistance(double beatDistance);
-    /// Must never result in a call to SyncableListener::notifyBpmChanged or
-    /// signal loops could occur.
+    /// @brief Update from [EngineSync]
+    /// @details Also called from reinitLeaderParams updateInstantaneousBpm. Must never result in a call to SyncableListener::notifyBpmChanged or signal loops could occur.
     void updateLeaderBpm(mixxx::Bpm bpm) override;
     void notifyLeaderParamSource() override;
     /// Combines the above three calls into one, since they are often set
     /// simultaneously. Avoids redundant recalculation that would occur by
     /// using the three calls separately.
     void reinitLeaderParams(double beatDistance, mixxx::Bpm baseBpm, mixxx::Bpm bpm) override;
-    /// Must never result in a call to
-    /// SyncableListener::notifyInstantaneousBpmChanged or signal loops could
-    /// occur.
+    /// Must never result in a call to SyncableListener::notifyInstantaneousBpmChanged 
+    /// or signal loops could occur.
     void updateInstantaneousBpm(mixxx::Bpm bpm) override;
     void onCallbackStart(std::chrono::microseconds absTimeWhenPrevOutputBufferReachesDac);
     void onCallbackEnd(int sampleRate, size_t bufferSize);
@@ -140,7 +138,7 @@ class MidiClockOut : public QObject, public Syncable {
 
     void slotControlOutEnabled(double controlButtonValue);
     void slotControlRestart(double controlButtonValue);
-    void slotControlTick(double controlButtonValue);
+    void slotControlTest(double controlButtonValue);
     void slotControlNudgeFwd(double controlButtonValue);
     void slotControlNudgeBack(double controlButtonValue);
 
@@ -155,6 +153,7 @@ class MidiClockOut : public QObject, public Syncable {
     std::chrono::microseconds m_absTimeWhenPrevOutputBufferReachesDac;
 
     bool m_enabled; ///< Enable or disable timing MidiClockOut ticks
+    bool m_uniquePlaying; ///< Track if it's the only playing syncable; follows sync jumps from updateLeaderBeatDistance is this is false, ie another leader is playing
 
     /// 24PPQN ticks
     uint32_t m_tickCount; ///< Number of ticks (24 PPQN)
@@ -163,16 +162,13 @@ class MidiClockOut : public QObject, public Syncable {
     uint32_t m_bars;      ///< Number of bars; 4 beats per bar
     // TODO(Tuuli): add a setting to change the meter from 4/4
 
-    // Tempo
-    void handleNewBPM(mixxx::Bpm newBpm);
-
     // Sync
     void restart();       ///< Restart all tick counters, all bpm adjusters, and the tick clock (if its running)
     void resetGui();      ///< Resets the GUI sixteenths, beats, bars to 1,1,1
     void backSixteenth(); ///< Move external device back 6 ticks
     void fwdSixteenth();  ///< Move external device forward 6 ticks
 
-    void forceGetBeatDistance(); // Is this possible?
+    void forceGetBeatDistance(); ///< 
 
     // MIDI
     bool sendDirectRTMidi(uint8_t status); ///< Sends 3 byte {status, 00, 00} to m_pMidiClockOutController
@@ -188,9 +184,9 @@ class MidiClockOut : public QObject, public Syncable {
     // Control objects
     std::unique_ptr<ControlPushButton> m_pMidiClockEnableButton;
     std::unique_ptr<ControlPushButton> m_pMidiClockRestartButton;
-    std::unique_ptr<ControlPushButton> m_pMidiClockTickButton;
     std::unique_ptr<ControlPushButton> m_pMidiClockNudgeFwdButton;
     std::unique_ptr<ControlPushButton> m_pMidiClockNudgeBackButton;
+    std::unique_ptr<ControlPushButton> m_pMidiClockTestButton;
     std::unique_ptr<ControlObject> m_pMidiClockPosSixteenths;
     std::unique_ptr<ControlObject> m_pMidiClockPosBeats;
     std::unique_ptr<ControlObject> m_pMidiClockPosBars;

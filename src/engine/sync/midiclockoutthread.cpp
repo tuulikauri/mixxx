@@ -52,10 +52,17 @@ void MidiClockOutThread::startMidiClockOutThread() {
         cond.wakeOne();
     qDebug() << "MidiClockOutThread::startMidiClockOutThread";
 }
-void MidiClockOutThread::stopPlease() {
+void MidiClockOutThread::stopThreadAndWait() {
     mutex.lock();
     stopplz = true;
     mutex.unlock();
+
+    resetPendingSyncAdjustment();
+
+    midiMutex.lock();
+    m_pMidiFIFOQueue->releaseReadRegions(m_pMidiFIFOQueue->readAvailable());
+    midiMutex.unlock();
+
     wait();
 }
 void MidiClockOutThread::testuSleepLength() {
@@ -188,8 +195,21 @@ double MidiClockOutThread::setBeatPosAt(std::chrono::steady_clock::time_point ti
     //in the previous run() loop.. before jumping
     //m_nextBeatPos = calcNextTickBeatPos(m_tickCount / 24.0);
     //m_tickCount++;
+    
 
     const QMutexLocker locker(&beatMutex);
+    /////////////////// logic review...
+    qWarning() << "DEBUG: MidiClockOutThread::setBeatPosAt() " << beatPos << beatStartPos << newStart << m_beatStartPos;
+    //auto oldStartatZero = m_beatSpeed * ((time - m_beatStartTime) / std::chrono::microseconds(1));
+    //auto newStartatZero = m_beatSpeed * ((time - time) / std::chrono::microseconds(1));
+    //newStartatZero - oldStartatZero = m_beatSpeed * (m_beatStartTime - time) / std::chrono::microseconds(1));
+
+    //auto oldPosatTime = beatStartPos = m_beatStartPos + m_beatSpeed * ((time - m_beatStartTime) / std::chrono::microseconds(1));
+    //auto newPosatTime = newStart = beatPos + numBeats;
+    //auto shift = newPosatTime - oldPosatTime;
+    ///////////////////
+
+
     m_beatStartPos = newStart;
     m_beatStartTime = time;
     ////m_nextBeatPos = nextBeat;
@@ -206,7 +226,8 @@ double MidiClockOutThread::setBeatPosFromBeatDistanceAt(std::chrono::steady_cloc
     qWarning() << "DEBUG: MidiClockOutThread::setBeatPosFromBeatDistanceAt " << beatDistance;
     double wholeBeats;
     auto partialBeats = modf(beatDistance, &wholeBeats);
-    return setBeatPosAt(time, partialBeats, addExisting);
+    //return setBeatPosAt(time, partialBeats, addExisting); // TODO(Tuuli) This isnt working yet, so return 0
+    return 0;
 }
 double MidiClockOutThread::resetBeatPosAt(std::chrono::steady_clock::time_point time) {    
     double beatResetPos = getBeatPosAt(time); /// The previous beat location at that time stamp is now the starting beat location
