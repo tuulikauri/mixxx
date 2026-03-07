@@ -86,7 +86,7 @@ void MidiClockOutThread::testuSleepLength() {
     }
     auto endTime = std::chrono::steady_clock::now();
     auto diffTime = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-    qDebug() << "MidiClockOutThread::testuSleepLength (5000*0.2ms = 10s) " << diffTime;
+    qDebug() << "MidiClockOutThread::testuSleepLength (5000*0.2ms = 10s) " << diffTime.count();
 }
 
 bool MidiClockOutThread::queueDirectRTMidi(uint8_t status) {
