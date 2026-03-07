@@ -13,7 +13,6 @@
 
 namespace {
 const mixxx::Logger kLogger("MidiClockOutThread");
-constexpr std::chrono::microseconds kStartTickLength{(int)(2500000.0 / 120.0)};
 constexpr double kStartBeatSpeed{(120.0 / 60'000'000.0)};
 }
 

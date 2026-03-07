@@ -78,10 +78,7 @@
 
 namespace {
 const mixxx::Logger kLogger("MidiClockOut");
-constexpr mixxx::Bpm kDefaultBpm(9999.9);
 constexpr mixxx::Bpm kStartBpm(120.0);
-constexpr std::chrono::microseconds kStartTickLength{(int)(2500000.0 / 120.0)};
-constexpr std::chrono::microseconds ktickCutOff{300};
 } // namespace
 
 MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
