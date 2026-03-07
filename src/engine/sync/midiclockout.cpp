@@ -370,6 +370,7 @@ void MidiClockOut::updateLeaderBpm(mixxx::Bpm bpm) {
     }
     m_currentBpm = bpm;
     auto beatPos = m_pMidiClockOutThread->setBeatTempoAt(timeNow, bpm.value());
+    Q_UNUSED(beatPos)
 }
 
 // TODO(Tuuli): Do we need to anything here?
@@ -409,6 +410,7 @@ void MidiClockOut::reinitLeaderParams(double beatDistance, mixxx::Bpm, mixxx::Bp
 
 void MidiClockOut::updateInstantaneousBpm(mixxx::Bpm bpm) {
     qDebug() << "MidiClockOut::updateInstantaneousBpm()";
+    Q_UNUSED(bpm)
     // updateLeaderBpm(bpm); /// Instantaneous is for scratching-only. Beatgrids instead use localBPM, which calls updateLeaderBpm
 }
 
@@ -433,7 +435,7 @@ void MidiClockOut::forceGetBeatDistance() {
 void MidiClockOut::restart() {
     qDebug() << "MidiClockOut::restart(), enabled: " << m_enabled;
     auto beatResetPos = m_pMidiClockOutThread->resetBeatPosAt(std::chrono::steady_clock::now());
-
+    Q_UNUSED(beatResetPos)
     sendMidiClockStop();
     if (m_enabled) {
         sendMidiClockStart();

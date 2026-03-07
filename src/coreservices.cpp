@@ -13,6 +13,7 @@
 #endif
 #include "control/controlindicatortimer.h"
 #include "controllers/controllermanager.h"
+#include "controllers/controller.h"
 #include "controllers/keyboard/keyboardeventfilter.h"
 #include "controllers/scripting/controllerscriptenginebase.h"
 #include "database/mixxxdb.h"

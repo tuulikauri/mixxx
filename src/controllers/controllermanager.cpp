@@ -174,7 +174,7 @@ void ControllerManager::slotInitialize() {
 void ControllerManager::slotShutdown() {
     m_pMidiClockOutController = nullptr;
 
-    stopPolling();    
+    stopPolling();
 
     // Clear m_enumerators before deleting the enumerators to prevent other code
     // paths from accessing them.
@@ -290,7 +290,7 @@ void ControllerManager::slotSetUpDevices() {
             continue;
         }
         pMapping->loadSettings(m_pConfig, pController->getName());
-        
+
         auto mappingName = pMapping->name();
 
         // This runs on the main thread but LegacyControllerMapping is not thread safe, so clone it.
@@ -308,13 +308,13 @@ void ControllerManager::slotSetUpDevices() {
         if (value != 0) {
             qWarning() << "There was a problem opening" << name;
             continue;
-        } 
+        }
         else {
             if (mappingName == "MIDI Clock Out") {
                 qDebug() << "Found MIDI Clock Out, emitting signal with pointer to controller.";
-                m_midiClockOutControllerName = deviceName;                
+                m_midiClockOutControllerName = deviceName;
                 m_pMidiClockOutController = pController;
-                emit foundMidiClockOut(m_midiClockOutControllerName, m_pMidiClockOutController);                    
+                emit foundMidiClockOut(m_midiClockOutControllerName, m_pMidiClockOutController);
             }
         }
     }

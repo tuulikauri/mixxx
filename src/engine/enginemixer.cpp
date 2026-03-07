@@ -27,6 +27,7 @@
 #include "util/parented_ptr.h"
 #include "util/sample.h"
 #include "util/samplebuffer.h"
+#include <QString>
 
 namespace {
 const QString kAppGroup = QStringLiteral("[App]");

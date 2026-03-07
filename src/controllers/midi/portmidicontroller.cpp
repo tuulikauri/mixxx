@@ -222,7 +222,7 @@ void PortMidiController::sendShortMsg(unsigned char status, unsigned char byte1,
     }
 }
 
-bool PortMidiController::sendBytes(const QByteArray& data) {
+bool PortMidiController::sendBytes(const QByteArray& data) {    
     // PortMidi does not receive a length argument for the buffer we provide to
     // Pm_WriteSysEx. Instead, it scans for a MidiOpCode::EndOfExclusive byte
     // to know when the message is over. If one is not provided, it will

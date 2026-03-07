@@ -19,7 +19,7 @@ constexpr double kStartBeatSpeed{(120.0 / 60'000'000.0)};
 
 MidiClockOutThread::MidiClockOutThread(MidiClockOut* parent) :
           QThread(parent),
-          m_pMidiClockOutParent(parent),
+          //m_pMidiClockOutParent(parent),
           stopplz(false),
           m_midiFIFOQueue(512),
           m_beatClockRunning(false),
@@ -56,11 +56,11 @@ void MidiClockOutThread::startMidiClockOutThread() { // TODO(Tuuli) This can be 
             condMidiControllerExists.wakeOne();
         }
         cond.wakeOne();
+    qDebug() << "MidiClockOutThread::startMidiClockOutThread";
     }
 }
 void MidiClockOutThread::stopThreadAndWait() {
     resetPendingSyncAdjustment();
-
     midiMutex.lock();
     m_pMidiFIFOQueue->releaseReadRegions(m_pMidiFIFOQueue->readAvailable());
     midiMutex.unlock();
@@ -86,7 +86,8 @@ void MidiClockOutThread::testuSleepLength() {
         mutex.unlock();
     }
     auto endTime = std::chrono::steady_clock::now();
-    qDebug() << "MidiClockOutThread::testuSleepLength (5000*0.2ms = 10s) " << std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    auto diffTime = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    qDebug() << "MidiClockOutThread::testuSleepLength (5000*0.2ms = 10s) " << diffTime;
 }
 
 bool MidiClockOutThread::queueDirectRTMidi(uint8_t status) {
@@ -122,7 +123,7 @@ bool MidiClockOutThread::sendDirectRTMidi(uint8_t status) {
     } else {
         return false;
     }
-    
+
     mutex.lock();
     if (m_pMidiClockOutController) {
         if (m_pMidiClockOutController->isOpen()) {
@@ -142,8 +143,14 @@ void MidiClockOutThread::setMidiClockOutController(Controller* pMidiClockOutCont
     m_pMidiClockOutController = pMidiClockOutController;
     mutex.unlock();
 
-    /// When a new controller is linked, reset any beats that accumulated previously. The tempo that has been tracked remains as the base tempo, so that external sequencers start at the most recent tempo
+    /// When a new controller is linked, reset any beats and MIDI messages that accumulated previously. The tempo that has been tracked remains as the base tempo, so that external sequencers start at the most recent tempo
     resetBeatPosAt(std::chrono::steady_clock::now());
+
+    resetPendingSyncAdjustment();
+    midiMutex.lock();
+    m_pMidiFIFOQueue->releaseReadRegions(m_pMidiFIFOQueue->readAvailable());
+    midiMutex.unlock();
+
     startMidiClockOutThread();
 }
 void MidiClockOutThread::deleteMidiClockOutController() {
@@ -153,7 +160,6 @@ void MidiClockOutThread::deleteMidiClockOutController() {
     mutex.unlock();
 
     resetPendingSyncAdjustment();
-
     midiMutex.lock();
     m_pMidiFIFOQueue->releaseReadRegions(m_pMidiFIFOQueue->readAvailable());
     midiMutex.unlock();
@@ -175,18 +181,18 @@ double MidiClockOutThread::calcBeatSpeedFromBpm(double bpm) {
     return bpm / 60'000'000.0;
 }
 double MidiClockOutThread::calcNextTickBeatPos(double beatPosition) {
-    uint32_t ticksPassed = std::floor(beatPosition * 24.0);
+    uint32_t ticksPassed = (uint32_t)std::floor(beatPosition * 24.0);
     return ((double)(ticksPassed+1) / 24.0);
 }
 double MidiClockOutThread::calcPrevTickBeatPos(double beatPosition) {
-    uint32_t ticksPassed = std::floor(beatPosition * 24.0);
+    uint32_t ticksPassed = (uint32_t)std::floor(beatPosition * 24.0);
     return ((double)(ticksPassed) / 24.0);
 }
 int32_t MidiClockOutThread::calcTicksBetween(double beatPositionStart, double beatPositionEnd) {
-    return std::floor((beatPositionEnd - beatPositionStart) * 24.0); // TODO(Tuuli): Does floor make sense? Might be a negative number. How do we want it rounded? Towards zero? Up/down?
+    return (uint32_t)std::floor((beatPositionEnd - beatPositionStart) * 24.0); // TODO(Tuuli): Does floor make sense? Might be a negative number. How do we want it rounded? Towards zero? Up/down?
 }
 int32_t MidiClockOutThread::calcTicksFromBeatPos(double beatPosition) {
-    return std::floor(beatPosition * 24.0); // TODO(Tuuli): Does floor make sense? Might be a negative number. How do we want it rounded? Towards zero? Up/down?
+    return (uint32_t)std::floor(beatPosition * 24.0); // TODO(Tuuli): Does floor make sense? Might be a negative number. How do we want it rounded? Towards zero? Up/down?
 }
 
 double MidiClockOutThread::getBeatPosAt(std::chrono::steady_clock::time_point time) {
@@ -207,7 +213,7 @@ double MidiClockOutThread::setBeatPosAt(std::chrono::steady_clock::time_point ti
     int numBeats = 0;
     double beatStartPos = getBeatPosAt(time);
     if (addExisting) {
-        numBeats = std::floor(beatStartPos);
+        numBeats = (int)std::floor(beatStartPos);
     }
 
     auto newStart = beatPos + numBeats; /// Add whole beats to avoid jumping the count
@@ -256,6 +262,9 @@ double MidiClockOutThread::setBeatPosFromBeatDistanceAt(std::chrono::steady_cloc
     double wholeBeats;
     auto partialBeats = modf(beatDistance, &wholeBeats);
     //return setBeatPosAt(time, partialBeats, addExisting); // TODO(Tuuli) This isnt working yet, so return 0
+    Q_UNUSED(partialBeats)
+    Q_UNUSED(time)
+    Q_UNUSED(addExisting)
     return 0;
 }
 double MidiClockOutThread::resetBeatPosAt(std::chrono::steady_clock::time_point time) {    
@@ -327,6 +336,7 @@ void MidiClockOutThread::run() {
         auto currentBeatPos = getBeatPosAt(nowTime);
         if (getBeatClockState()) {
             auto nextPos = getNextBeatPos();
+            Q_UNUSED(nextPos)
             //qDebug() << "MidiClockOutThread::run() Current,next: " << currentBeatPos << nextPos;
             if (currentBeatPos > getNextBeatPos()) {
                 //qDebug() << "TIME FOR NO MORE OF THOSE THREAD-BLOCKIN' BEATS!";
