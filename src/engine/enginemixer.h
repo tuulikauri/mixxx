@@ -239,9 +239,9 @@ class EngineMixer : public QObject, public AudioSource {
                              sizeof(long double)];
     };
 
-public slots:     
+  public slots:
     void slotFoundMidiClockOut(const QString& name, Controller* pMidiClockOutController); ///< CoreServices connects this slot to the ControllerManager. When the ControllerManager finds an open mapping to Midi Clock Out it sends the controller's pointer for MidiClockOut to use
-  void slotDeleteMidiClockOut(const QString& name);                                     ///< CoreServices connects this slot to the ControllerManager. When the ControllerManager exits it emits this signal so MidiClockOut isn't left with a dangling pointer to the Controller
+    void slotDeleteMidiClockOut(const QString& name);                                     ///< CoreServices connects this slot to the ControllerManager. When the ControllerManager exits it emits this signal so MidiClockOut isn't left with a dangling pointer to the Controller
 
   protected:
     // The main buffer is protected so it can be accessed by test subclasses.
