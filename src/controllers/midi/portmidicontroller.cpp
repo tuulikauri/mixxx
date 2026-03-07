@@ -230,7 +230,7 @@ bool PortMidiController::sendBytes(const QByteArray& data) {
     if (data.startsWith(MidiUtils::opCodeValue(MidiOpCode::TimingClock)) || 
             data.startsWith(MidiUtils::opCodeValue(MidiOpCode::Start)) || 
             data.startsWith(MidiUtils::opCodeValue(MidiOpCode::Continue)) || 
-            data.startsWith(MidiUtils::opCodeValue(MidiOpCode::Stop))) {        
+            data.startsWith(MidiUtils::opCodeValue(MidiOpCode::Stop))) {
         // Hack to allow MidiClockOut to send short messages for it's realtime messages using a generic Controller class
         sendShortMsg(data.at(0), (uint8_t)0x00, (uint8_t)0x00);
         return true;

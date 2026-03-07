@@ -147,6 +147,7 @@ signals:
 private:
     QMutex mutex;
     QWaitCondition cond; //TODO(Tuuli) Remove this? Is it helpful / needed?
+    QWaitCondition condMidiControllerExists; ///< Wait if the MidiController doesn't exist
     MidiClockOut* m_pMidiClockOutParent; //TODO(Tuuli) Remove this? Is it helpful / needed?
     bool stopplz;
 

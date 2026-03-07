@@ -930,6 +930,7 @@ void CoreServices::finalize() {
 
     // ControllerManager depends on Config
     qDebug() << t.elapsed(false).debugMillisWithUnit() << "deleting ControllerManager";
+    m_pEngine->slotDeleteMidiClockOut("");
     CLEAR_AND_CHECK_DELETED(m_pControllerManager);
 
 #ifdef __VINYLCONTROL__

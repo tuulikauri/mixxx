@@ -134,6 +134,7 @@ ControllerManager::ControllerManager(UserSettingsPointer pConfig)
 }
 
 ControllerManager::~ControllerManager() {
+    emit deleteMidiClockOut(m_midiClockOutControllerName); // TODO(Tuuli) Why isnt this reaching MidiClockOutThread quickly? Takes 10ms or more and the controller is deleted long before the thread is notified
     emit requestShutdown();
     m_pThread->wait();
     delete m_pThread;
@@ -171,10 +172,9 @@ void ControllerManager::slotInitialize() {
 }
 
 void ControllerManager::slotShutdown() {
-    emit deleteMidiClockOut(m_midiClockOutControllerName);
     m_pMidiClockOutController = nullptr;
 
-    stopPolling();    
+    stopPolling();
 
     // Clear m_enumerators before deleting the enumerators to prevent other code
     // paths from accessing them.
@@ -290,10 +290,10 @@ void ControllerManager::slotSetUpDevices() {
             continue;
         }
         pMapping->loadSettings(m_pConfig, pController->getName());
-        
+
         auto mappingName = pMapping->name();
 
-        // This runs on the main thread but LegacyControllerMapping is not thread safe, so clone it.        
+        // This runs on the main thread but LegacyControllerMapping is not thread safe, so clone it.
         pController->setMapping(std::move(pMapping));
 
         // If we are in safe mode, skip opening controllers.
@@ -312,9 +312,9 @@ void ControllerManager::slotSetUpDevices() {
         else {
             if (mappingName == "MIDI Clock Out") {
                 qDebug() << "Found MIDI Clock Out, emitting signal with pointer to controller.";
-                m_midiClockOutControllerName = deviceName;                
+                m_midiClockOutControllerName = deviceName;
                 m_pMidiClockOutController = pController;
-                emit foundMidiClockOut(m_midiClockOutControllerName, m_pMidiClockOutController);                    
+                emit foundMidiClockOut(m_midiClockOutControllerName, m_pMidiClockOutController);
             }
         }
     }
@@ -403,7 +403,7 @@ void ControllerManager::openController(Controller* pController) {
     if (pController->isOpen()) {
         pController->close();
     }
-    int result = pController->open(m_pConfig->getResourcePath()); 
+    int result = pController->open(m_pConfig->getResourcePath());
     pollIfAnyControllersOpen();
 
     // If successfully opened the device, apply the mapping and save the
@@ -461,13 +461,19 @@ void ControllerManager::slotApplyMapping(Controller* pController,
     if (bEnabled) {
         emit mappingApplied(pController->isMappable());
         if (mappingName == "MIDI Clock Out") {
-            qDebug() << "Found MIDI Clock Out, emitting signals with pointer to controller.";            
+            qDebug() << "Found MIDI Clock Out, emitting signals with pointer to controller.";
             m_midiClockOutControllerName = sanitizeDeviceName(pController->getName());
             m_pMidiClockOutController = pController;
-            emit foundMidiClockOut(m_midiClockOutControllerName, m_pMidiClockOutController);    
+            emit foundMidiClockOut(m_midiClockOutControllerName, m_pMidiClockOutController);
         }
     } else {
         emit mappingApplied(false);
+        if (mappingName == "MIDI Clock Out") {
+            qDebug() << "Disabling MIDI Clock Out, emitting remove signal.";
+            emit deleteMidiClockOut(m_midiClockOutControllerName);
+            m_midiClockOutControllerName = sanitizeDeviceName(pController->getName());
+            m_pMidiClockOutController = nullptr;
+        }
         return;
     }
 
