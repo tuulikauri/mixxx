@@ -866,6 +866,7 @@ MidiClockOut* EngineSync::getMidiClockOut() {
     return m_pMidiClockOut;
 }
 void EngineSync::setMidiClockOutController(Controller* pMidiClockOutController) {
+    qDebug() << "EngineSync::setMidiClockOutController()";
     m_pMidiClockOut->setMidiClockOutController(pMidiClockOutController);
 }
 void EngineSync::deleteMidiClockOutController() {

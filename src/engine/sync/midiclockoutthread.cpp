@@ -34,27 +34,29 @@ MidiClockOutThread::MidiClockOutThread(MidiClockOut* parent) :
     qDebug() << "MidiClockOutThread::Created ";
 }
 MidiClockOutThread::~MidiClockOutThread() {
-    qDebug() << "MidiClockOutThread::destroy ";
+    qDebug() << "MidiClockOutThread::~MidiClockOutThread() destroying ";
     mutex.lock();
     stopplz = true;
-    cond.wakeOne();
+    cond.wakeOne(); //TODO(Tuuli) remove this cond
+    condMidiControllerExists.wakeOne();
     mutex.unlock();
-    qDebug() << "MidiClockOutThread::waiting ";
+    qDebug() << "MidiClockOutThread::~MidiClockOutThread() waiting ";
     wait();
-    qDebug() << "MidiClockOutThread::done ";
+    qDebug() << "MidiClockOutThread::~MidiClockOutThread() done ";
 }
 void MidiClockOutThread::startMidiClockOutThread() { // TODO(Tuuli) This can be combined with setMidiClockOutController; theres no reason for the thread to run if there's no MIDI controller mapped
+    qDebug() << "MidiClockOutThread::startMidiClockOutThread()";
     QMutexLocker locker(&mutex);
     if (!isRunning()) {
         // m_startTime = std::chrono::steady_clock::now();
         start(QThread::HighestPriority);
     } else {
-        cond.wakeOne();
         if (m_pMidiClockOutController) {
+            qDebug() << "MidiClockOutThread::startMidiClockOutThread() Wake up, theres a midi controller";
             condMidiControllerExists.wakeOne();
         }
+        cond.wakeOne();
     }
-    qDebug() << "MidiClockOutThread::startMidiClockOutThread";
 }
 void MidiClockOutThread::stopThreadAndWait() {
     resetPendingSyncAdjustment();
@@ -135,15 +137,17 @@ bool MidiClockOutThread::sendDirectRTMidi(uint8_t status) {
     return false;
 }
 void MidiClockOutThread::setMidiClockOutController(Controller* pMidiClockOutController) {
+    qDebug() << "MidiClockOutThread::setMidiClockOutController()";
     mutex.lock();
-    if (m_pMidiClockOutController) {
-        m_pMidiClockOutController = pMidiClockOutController; ///< Duplicate unowned pointer to the Controller that is linked to Midi Clock Out mapping
-        condMidiControllerExists.wakeOne();
-    }
+    m_pMidiClockOutController = pMidiClockOutController;
     mutex.unlock();
+
+    /// When a new controller is linked, reset any beats that accumulated previously. The tempo that has been tracked remains as the base tempo, so that external sequencers start at the most recent tempo
+    resetBeatPosAt(std::chrono::steady_clock::now());
     startMidiClockOutThread();
 }
 void MidiClockOutThread::deleteMidiClockOutController() {
+    qDebug() << "MidiClockOutThread::deleteMidiClockOutController()";
     mutex.lock();
     m_pMidiClockOutController = nullptr;
     mutex.unlock();
@@ -153,8 +157,6 @@ void MidiClockOutThread::deleteMidiClockOutController() {
     midiMutex.lock();
     m_pMidiFIFOQueue->releaseReadRegions(m_pMidiFIFOQueue->readAvailable());
     midiMutex.unlock();
-
-    //cond.wait(&mutex);
 }
 
 void MidiClockOutThread::setBeatClockState(bool state) {
@@ -298,6 +300,7 @@ int16_t MidiClockOutThread::getPendingSyncAdjustment() {
 
 
 void MidiClockOutThread::run() {
+    qDebug() << "MidiClockOutThread::run() start";
     bool stopNow = false;
 
     beatMutex.lock();
@@ -332,7 +335,7 @@ void MidiClockOutThread::run() {
                 }
                 beatMutex.lock();
                 // This factors out to m_nextBeatPos = (m_tickCount + 1) / 24.0;
-                m_nextBeatPos = calcNextTickBeatPos(m_tickCount / 24.0); // TODO(Tuuli): check ++mV_ticksSinceBpmChange in tick() for how planned ticks in the past are handled without the thread
+                m_nextBeatPos = calcNextTickBeatPos(m_tickCount / 24.0); // TODO(Tuuli): check old commits before thread, ++mV_ticksSinceBpmChange in tick() for how planned ticks in the past are handled without the thread
                 m_tickCount++;
                 beatMutex.unlock();
             }
@@ -354,12 +357,12 @@ void MidiClockOutThread::run() {
                             emit tickSent(0);
                         }
                     } else {
-                        qWarning() << "MidiClockOutThread::sendDirectRTMidi, failed to send " << data;
+                        qWarning() << "MidiClockOutThread::run()::sendDirectRTMidi, failed to send " << data; // TODO(Tuuli) This warning is posted about 50 times on exit when trying to use emit deleteMidiClockOut() in ControllerManager, why?
                     }
                 }
             } else {
                 midiMutex.unlock();
-                qWarning() << "MidiClockOutThread, failed to read FIFO buffer but it has data ";
+                qWarning() << "MidiClockOutThread::run(), failed to read FIFO buffer but it has data ";
             }
         } else {
             midiMutex.unlock();
@@ -370,8 +373,12 @@ void MidiClockOutThread::run() {
         mutex.lock(); //TODO(Tuuli) How expensive is this mutex lock? This could be a shared mutex since it is read every 200us but written rarely. Or an atomic boolean variable?
         stopNow = stopplz;
         /// If there's no longer a Midi controller, but the thread hasn't been told to end, wait for a new Midi controller
+        // TODO(Tuuli) This isnt exiting properly as Controller Manager is deleted; it doesnt receive the shutdown signals if they are emitted by ControllerManager and still tried to send Midi to a deleted Controller, until EngineSync is deleted. Instead, calling m_pEngine->slotDeleteMidiClockOut(""); from CoreServices::finalize();
         if (!m_pMidiClockOutController && !stopNow) {
+            qDebug() << "MidiClockOutThread::run() Sleeping now... zzzzzzz ";
             condMidiControllerExists.wait(&mutex);
+            qDebug() << "MidiClockOutThread::run() Waking up now... Hello?? ";
+            stopNow = stopplz;
         }
         mutex.unlock();
     }

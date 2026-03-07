@@ -60,7 +60,8 @@
     // Need to capture a notice about the new leader and then pull their BPM.
 
 // Direct access to Controller:
-//TODO(Tuuli) BUG Crashing when swapping mapped devices (probably garbage collection / pointer issues) Need to handle updates from ControllerManager similarly to initializing and shutdowns (probably can use the same functions / signals already wired up)
+//TODO(Tuuli) BUG-FIXED Crashing when swapping mapped devices (probably garbage collection / pointer issues) Need to handle updates from ControllerManager similarly to initializing and shutdowns (probably can use the same functions / signals already wired up). I think it's fixed now, I added some more recycling and removal of old pointers in ControllerManager and CoreServices?
+// TODO(Tuuli) BUG Queued MIDI messages arent cleared when the controller is reopened in settings
 //TODO(Tuuli) BUG Why no messages received by MIDI-OX, was it just that portmidi errored out after a buffer overflow or something? Try to reproduce by crashing / overflowing portmidi and see what happens... Swapping devices seemed to fix it last time...
 
 #include "engine/sync/midiclockout.h"
@@ -155,7 +156,7 @@ MidiClockOut::MidiClockOut(const QString& group, EngineSync* pEngineSync)
 
     // Other setup
 
-    m_pMidiClockOutThread->startMidiClockOutThread();
+    //m_pMidiClockOutThread->startMidiClockOutThread();
     QObject::connect(m_pMidiClockOutThread.get(), &MidiClockOutThread::tickSent, this, &MidiClockOut::tickGui);
 
     // audioThreadDebugOutput();
@@ -220,13 +221,14 @@ MidiClockOut::~MidiClockOut() {
     m_pMidiClockPosBeats.reset();
     m_pMidiClockPosBars.reset();
 
-    // Destroy pointer safely
-    deleteMidiClockOutController();
+    // TODO(Tuuli): This is for destroying the pointer safely - but is redundant and late, ~MidiClockOut is when the Engine is deleted, which is last in the CoreServices::finalize() process and way after the controllers are shutdown and deleted. Instead, directly called before ~ControllerManager.
+    // deleteMidiClockOutController();
 
     qDebug() << "MidiClockOut::destroyed";
 }
 
 void MidiClockOut::setMidiClockOutController(Controller* pMidiClockOutController) {
+    qDebug() << "MidiClockOut::setMidiClockOutController()";
     m_pMidiClockOutController = pMidiClockOutController;
     m_pMidiClockOutThread->setMidiClockOutController(pMidiClockOutController);
 }
@@ -500,7 +502,6 @@ void MidiClockOut::fwdSixteenth() {
     qDebug() << "MidiClockOut::fwdSixteenth()";
 
     m_pMidiClockOutThread->addPendingSyncAdjustment((int16_t)6);
-    return;
 
     // m_tickCount+=6;
     //
@@ -525,7 +526,6 @@ void MidiClockOut::backSixteenth() {
     qDebug() << "MidiClockOut::backSixteenth()";
     // TODO(Tuuli): dont add negative ticks if they are large or theres no room to back up. Tick-driven sequencers cannot go backwards, so they will pause when the clock is skipping / waiting; meaning silence or perhaps reverb / effects playing out. Label any backwards skips as a PAUSE.
     m_pMidiClockOutThread->addPendingSyncAdjustment((int16_t)(-6));
-    return;
 
     // if (m_tickCount >= 6) {
     //  adjustSyncTicks(-6);
@@ -567,24 +567,6 @@ std::chrono::microseconds MidiClockOut::getHostTimeAtSpeaker(std::chrono::micros
 /// It captures the current time and updates the audio buffer time.
 void MidiClockOut::onCallbackStart(std::chrono::microseconds absTimeWhenPrevOutputBufferReachesDac) {
     m_absTimeWhenPrevOutputBufferReachesDac = absTimeWhenPrevOutputBufferReachesDac;
-
-    if (!m_enabled) {
-        return;
-    }
-
-    // TODO(Tuuli): Is this necessary? Would checking the sync instead make more sense, or not having checks at all?
-    // check leaders bpm
-    /*
-    Syncable* target = m_pEngineSync->pickNonSyncSyncTarget(getChannel());
-    if (target == nullptr) {
-    return;
-    }
-    auto newSetBpm = target->getBpm();
-    if (newSetBpm.isReasonable()) {
-    m_newBpm = newSetBpm;
-    handleNewBPM();
-    }
-    */
 }
 
 void MidiClockOut::onCallbackEnd(int sampleRate, size_t bufferSize) {
