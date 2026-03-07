@@ -27,6 +27,7 @@
 #include "util/parented_ptr.h"
 #include "util/sample.h"
 #include "util/samplebuffer.h"
+#include <QString>
 
 namespace {
 const QString kAppGroup = QStringLiteral("[App]");
@@ -1076,4 +1077,15 @@ void EngineMixer::registerNonEngineChannelSoundIO(gsl::not_null<SoundManager*> p
 
 bool EngineMixer::sidechainMixRequired() const {
     return m_pEngineSideChain && !m_bExternalRecordBroadcastInputConnected;
+}
+
+void EngineMixer::slotFoundMidiClockOut(const QString& name, Controller* pMidiClockOutController) {
+    Q_UNUSED(name)
+    qDebug() << "EngineMixer::slotFoundMidiClockOut sending to EngineSync";
+    m_pEngineSync->setMidiClockOutController(pMidiClockOutController);
+}
+void EngineMixer::slotDeleteMidiClockOut(const QString& name) {
+    Q_UNUSED(name)
+    qDebug() << "EngineMixer::slotDeleteMidiClockOut sending to EngineSync";
+    m_pEngineSync->deleteMidiClockOutController();
 }

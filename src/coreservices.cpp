@@ -13,6 +13,7 @@
 #endif
 #include "control/controlindicatortimer.h"
 #include "controllers/controllermanager.h"
+#include "controllers/controller.h"
 #include "controllers/keyboard/keyboardeventfilter.h"
 #include "controllers/scripting/controllerscriptenginebase.h"
 #include "database/mixxxdb.h"
@@ -766,6 +767,10 @@ void CoreServices::initialize(QApplication* pApp) {
 
     ControllerScriptEngineBase::registerPlayerManager(getPlayerManager());
 
+    qDebug() << "Making Midi Clock Out connections in CoreServices";
+    connect(m_pControllerManager.get(), &ControllerManager::foundMidiClockOut, m_pEngine.get(), &EngineMixer::slotFoundMidiClockOut, Qt::QueuedConnection);
+    connect(m_pControllerManager.get(), &ControllerManager::deleteMidiClockOut, m_pEngine.get(), &EngineMixer::slotDeleteMidiClockOut, Qt::QueuedConnection);
+    
 #ifdef MIXXX_USE_QML
     initializeQMLSingletons();
 }
@@ -926,6 +931,7 @@ void CoreServices::finalize() {
 
     // ControllerManager depends on Config
     qDebug() << t.elapsed(false).debugMillisWithUnit() << "deleting ControllerManager";
+    m_pEngine->slotDeleteMidiClockOut("");
     CLEAR_AND_CHECK_DELETED(m_pControllerManager);
 
 #ifdef __VINYLCONTROL__

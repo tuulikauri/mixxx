@@ -18,6 +18,7 @@ compile_commands.json
 
 # Doxygen documentation
 /doxygen
+Doxyfile.bak
 
 # Exclude buildenv directory from our helper scripts
 /buildenv

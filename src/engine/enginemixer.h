@@ -31,6 +31,7 @@ class EngineEffectsManager;
 class EngineSync;
 class EngineTalkoverDucking;
 class EngineDelay;
+class Controller; /// Only required for MidiClockOut to receive a controller pointer
 
 // The number of channels to pre-allocate in various structures in the
 // engine. Prevents memory allocation in EngineMixer::addChannel.
@@ -237,6 +238,10 @@ class EngineMixer : public QObject, public AudioSource {
         long double m_buffer[(CAPACITY * sizeof(T) + sizeof(long double) - 1) /
                              sizeof(long double)];
     };
+
+  public slots:
+    void slotFoundMidiClockOut(const QString& name, Controller* pMidiClockOutController); ///< CoreServices connects this slot to the ControllerManager. When the ControllerManager finds an open mapping to Midi Clock Out it sends the controller's pointer for MidiClockOut to use
+    void slotDeleteMidiClockOut(const QString& name);                                     ///< CoreServices connects this slot to the ControllerManager. When the ControllerManager exits it emits this signal so MidiClockOut isn't left with a dangling pointer to the Controller
 
   protected:
     // The main buffer is protected so it can be accessed by test subclasses.

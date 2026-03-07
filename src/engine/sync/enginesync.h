@@ -8,6 +8,7 @@
 class InternalClock;
 class AbletonLink;
 class MidiClockOut;
+class Controller; /// Only required for MidiClockOut to receive a controller pointer
 class EngineChannel;
 
 const QString kBpmConfigGroup = QStringLiteral("[BPM]");
@@ -77,6 +78,11 @@ class EngineSync : public SyncableListener {
             std::size_t bufferSize,
             std::chrono::microseconds absTimeWhenPrevOutputBufferReachesDac);
     void onCallbackEnd(mixxx::audio::SampleRate sampleRate, std::size_t bufferSize);
+
+    MidiClockOut* getMidiClockOut(); ///< Currently unused   
+    void setMidiClockOutController(Controller* pMidiClockOutController); ///< Pointer is passed down from EngineMixer event Slot, which CoreServices connects to the ControllerManager. When the ControllerManager finds an open mapping to Midi Clock Out it sends the controller's pointer for MidiClockOut to use
+    void deleteMidiClockOutController(); ///< Call is passed down from EngineMixer event Slot, which CoreServices connects to the ControllerManager. When the ControllerManager exits it emits this signal so MidiClockOut isn't left with a dangling pointer to the Controller
+
 
   private:
     /// Iterate over decks, and based on sync and play status, pick a new Leader, or return the
