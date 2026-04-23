@@ -1,3 +1,5 @@
+/// @file midiclockoutthread.cpp
+/// @brief Thread for a Midi clock output (0xF8, 0xFA, 0xFB, 0xFC) and timing.
 #include "engine/sync/midiclockoutthread.h"
 #include "engine/sync/midiclockout.h"
 
@@ -43,7 +45,11 @@ MidiClockOutThread::~MidiClockOutThread() {
     wait();
     qDebug() << "MidiClockOutThread::~MidiClockOutThread() done ";
 }
-void MidiClockOutThread::startMidiClockOutThread() { // TODO(Tuuli) This can be combined with setMidiClockOutController; theres no reason for the thread to run if there's no MIDI controller mapped
+void MidiClockOutThread::
+        startMidiClockOutThread() { // TODO(Tuuli) This can be combined with
+                                    // setMidiClockOutController; there's no
+                                    // reason for the thread to run if there's
+                                    // no MIDI controller mapped
     qDebug() << "MidiClockOutThread::startMidiClockOutThread()";
     QMutexLocker locker(&mutex);
     if (!isRunning()) {
@@ -51,7 +57,8 @@ void MidiClockOutThread::startMidiClockOutThread() { // TODO(Tuuli) This can be 
         start(QThread::HighestPriority);
     } else {
         if (m_pMidiClockOutController) {
-            qDebug() << "MidiClockOutThread::startMidiClockOutThread() Wake up, theres a midi controller";
+            qDebug() << "MidiClockOutThread::startMidiClockOutThread() Wake "
+                        "up, there's a midi controller";
             condMidiControllerExists.wakeOne();
         }
         cond.wakeOne();
@@ -260,7 +267,8 @@ double MidiClockOutThread::setBeatPosFromBeatDistanceAt(std::chrono::steady_cloc
     qWarning() << "DEBUG: MidiClockOutThread::setBeatPosFromBeatDistanceAt " << beatDistance;
     double wholeBeats;
     auto partialBeats = modf(beatDistance, &wholeBeats);
-    //return setBeatPosAt(time, partialBeats, addExisting); // TODO(Tuuli) This isnt working yet, so return 0
+    // return setBeatPosAt(time, partialBeats, addExisting); // TODO(Tuuli) This
+    // isn't working yet, so return 0
     Q_UNUSED(partialBeats)
     Q_UNUSED(time)
     Q_UNUSED(addExisting)
@@ -381,8 +389,13 @@ void MidiClockOutThread::run() {
 
         mutex.lock(); //TODO(Tuuli) How expensive is this mutex lock? This could be a shared mutex since it is read every 200us but written rarely. Or an atomic boolean variable?
         stopNow = stopplz;
-        /// If there's no longer a Midi controller, but the thread hasn't been told to end, wait for a new Midi controller
-        // TODO(Tuuli) This isnt exiting properly as Controller Manager is deleted; it doesnt receive the shutdown signals if they are emitted by ControllerManager and still tried to send Midi to a deleted Controller, until EngineSync is deleted. Instead, calling m_pEngine->slotDeleteMidiClockOut(""); from CoreServices::finalize();
+        /// If there's no longer a Midi controller, but the thread hasn't been
+        /// told to end, wait for a new Midi controller
+        // TODO(Tuuli) This isn't exiting properly as Controller Manager is
+        // deleted; it does not receive the shutdown signals if they are emitted
+        // by ControllerManager and still tried to send Midi to a deleted
+        // Controller, until EngineSync is deleted. Instead, calling
+        // m_pEngine->slotDeleteMidiClockOut(""); from CoreServices::finalize();
         if (!m_pMidiClockOutController && !stopNow) {
             qDebug() << "MidiClockOutThread::run() Sleeping now... zzzzzzz ";
             condMidiControllerExists.wait(&mutex);

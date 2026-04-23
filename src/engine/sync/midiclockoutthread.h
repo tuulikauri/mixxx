@@ -1,3 +1,5 @@
+/// @file midiclockoutthread.h
+/// @brief Thread for a Midi clock output (0xF8, 0xFA, 0xFB, 0xFC) and timing.
 #pragma once
 
 #include <QMutex>
@@ -16,10 +18,14 @@
 // The main audio thread will block to wait for a mutex to free.
 // Thread can emit signals for the GUI
 
+/// @brief Thread for a Midi clock output (0xF8, 0xFA, 0xFB, 0xFC) and timing.
+/// @callergraph
+/// @callgraph
 /// This thread is based around the concept of a beatSpeed.
-/// beatSpeed [ beats per us ] = bpm [b/min] * 1/60 [min/s] * 1/1,000,000 [s/us] = bpm / 60,000,000 [b/us]
-/// sync events : change the startPos and either send or skip sync ticks to sync external devices
-/// tempo events : change the beatSpeed, at a specific startTime
+/// beatSpeed [ beats per us ] = bpm [b/min] * 1/60 [min/s] * 1/1,000,000 [s/us]
+/// = bpm / 60,000,000 [b/us] sync events : change the startPos and either send
+/// or skip sync ticks to sync external devices tempo events : change the
+/// beatSpeed, at a specific startTime
 ///
 /// beatPosAt(time) = startPos + beatSpeed * (time - startTime)
 /// nextBeat = 2
@@ -27,8 +33,14 @@
 ///     tick();
 ///     nextBeat++;
 /// }
-/// 
-// Since this is a tempo-follower it will need to catch any tempo-related events. Within MidiClockOut there needs to be a listener, which then forwards events. If the DJ wants to stop the clock for external sequencers, they should expect clock pulses to stop pretty quick.. What if we treated it as a deck? Doesnt sync lock, matches tempo if synced. Could enable or disable sync follow and just focus on tempo. QElapsedTimer for measuring precise times might be another option.
+///
+// Since this is a tempo-follower it will need to catch any tempo-related
+// events. Within MidiClockOut there needs to be a listener, which then forwards
+// events. If the DJ wants to stop the clock for external sequencers, they
+// should expect clock pulses to stop pretty quick.. What if we treated it as a
+// deck? Does not sync lock, matches tempo if synced. Could enable or disable
+// sync follow and just focus on tempo. QElapsedTimer for measuring precise
+// times might be another option.
 
 class MidiClockOut;
 
@@ -49,10 +61,14 @@ public:
     /// @details Queues to portMidi device with midi_clock_out script mapped. The pointer m_pMidiClockOutController stores this device controller address
     bool queueDirectRTMidi(uint8_t status); 
     uint16_t queueDirectRTMidiMultiple(uint8_t status, int count); ///< Adds status to the queue of MIDI data to send, count times
-    /// @brief Sends 0xF8,FA,FB or FC status byte to portMidi device with midi_clock_out script mapped
+    /// @brief Sends 0xF8,FA,FB or FC status byte to portMidi device with
+    /// midi_clock_out script mapped
     /// @param status byte to send (0xF8,FA,FB or FC only)
     /// @return success or failure
-    /// @details Only handles F8,FA,FB,FC, otherwise returns false. This function is used in run(). run() removes the next byte from midiFIFOQueue, checks for a pending sync tick-skip (disgards 0xF8 if found), and then sends the MIDI data using this function
+    /// @details Only handles F8,FA,FB,FC, otherwise returns false. This
+    /// function is used in run(). run() removes the next byte from
+    /// midiFIFOQueue, checks for a pending sync tick-skip (discards 0xF8 if
+    /// found), and then sends the MIDI data using this function
     bool sendDirectRTMidi(uint8_t status); 
     /// @brief called from [main]
     /// @param pMidiClockOutController 
@@ -64,12 +80,22 @@ public:
 
     double calcBeatSpeedFromBpm(double bpm); ///< Utility function to convert bpm to beats per microsecond "beatSpeed"
     int32_t calcTicksFromBeatPos(double beatPosition); ///< Utility function to convert a beatPosition to ticks; does not consider the current beat clock, only the size of beatPosition
-    int32_t calcTicksBetween(double beatPositionStart, double beatPositionEnd); ///< Utility function to convert a twoo beatPositions to ticks; does not consider the current beat clock, only the size of beatPositions
+    int32_t calcTicksBetween(double beatPositionStart,
+            double beatPositionEnd); ///< Utility function to convert two
+                                     ///< beatPositions to ticks; does not
+                                     ///< consider the current beat clock, only
+                                     ///< the size of beatPositions
     /// @brief Utility function to determine the next following 24PPQN position. If the position is on a tick, returns the next 24 PPQN tick
     /// @param beatPosition to calc from 
     /// @return beatPosition of the next 24PPQN tick
-    double calcNextTickBeatPos(double beatPosition); 
-    double calcPrevTickBeatPos(double beatPosition); ///< Utility function to determine the previous 24PPQN position. If the position is on a tick, returns the tick and not the previous 24 PPQN tick // TODO(Tuuli): Does this make sense to round this way? Not used, havent thought about it yet...
+    double calcNextTickBeatPos(double beatPosition);
+    double calcPrevTickBeatPos(
+            double beatPosition); ///< Utility function to determine the
+                                  ///< previous 24PPQN position. If the position
+                                  ///< is on a tick, returns the tick and not
+                                  ///< the previous 24 PPQN tick // TODO(Tuuli):
+                                  ///< Does this make sense to round this way?
+                                  ///< Not used, haven't thought about it yet...
 
     /// @brief Enables and disables the clock in run(); called from [main]
     /// @param state 

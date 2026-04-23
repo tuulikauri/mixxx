@@ -94,6 +94,14 @@ EngineMixer::EngineMixer(UserSettingsPointer pConfig,
                   ConfigKey(group, "boothDelay"))),
           m_pLatencyCompensationDelay(std::make_unique<EngineDelay>(
                   ConfigKey(group, "microphoneLatencyCompensation"))),
+          m_pExternalSyncLatencyCompensation(std::make_unique<ControlPotmeter>(
+                  ConfigKey(group, "externalSyncLatencyCompensation"),
+                  -100.0, // min
+                  100.0,  // max
+                  true,   // allowOutOfBounds
+                  true,   // bIgnoreNops
+                  false,  // bTrack
+                  true)), // bPersist
           m_pVumeter(std::make_unique<EngineVuMeter>(kMainGroup, kLegacyGroup)),
           // Starts a thread for recording and broadcast
           m_pEngineSideChain(bEnableSidechain
@@ -461,8 +469,7 @@ void EngineMixer::process(const std::size_t bufferSize,
                 m_sampleRate,
                 busFeatures,
                 CSAMPLE_GAIN_ONE,
-                CSAMPLE_GAIN_ONE,
-                false);
+                CSAMPLE_GAIN_ONE);
     }
 
     switch (m_pTalkoverDucking->getMode()) {
@@ -516,8 +523,7 @@ void EngineMixer::process(const std::size_t bufferSize,
                 m_sampleRate,
                 busFeatures,
                 CSAMPLE_GAIN_ONE,
-                CSAMPLE_GAIN_ONE,
-                false);
+                CSAMPLE_GAIN_ONE);
         m_pEngineEffectsManager->processPostFaderInPlace(
                 m_busCrossfaderCenterHandle.handle(),
                 m_mainHandle.handle(),
@@ -526,8 +532,7 @@ void EngineMixer::process(const std::size_t bufferSize,
                 m_sampleRate,
                 busFeatures,
                 CSAMPLE_GAIN_ONE,
-                CSAMPLE_GAIN_ONE,
-                false);
+                CSAMPLE_GAIN_ONE);
         m_pEngineEffectsManager->processPostFaderInPlace(
                 m_busCrossfaderRightHandle.handle(),
                 m_mainHandle.handle(),
@@ -536,8 +541,7 @@ void EngineMixer::process(const std::size_t bufferSize,
                 m_sampleRate,
                 busFeatures,
                 CSAMPLE_GAIN_ONE,
-                CSAMPLE_GAIN_ONE,
-                false);
+                CSAMPLE_GAIN_ONE);
     }
 
     if (mainEnabled) {
@@ -810,8 +814,7 @@ void EngineMixer::applyMainEffects(std::size_t bufferSize) {
                 m_sampleRate,
                 mainFeatures,
                 CSAMPLE_GAIN_ONE,
-                CSAMPLE_GAIN_ONE,
-                false);
+                CSAMPLE_GAIN_ONE);
     }
 }
 

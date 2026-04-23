@@ -1,68 +1,110 @@
-// TODO(Tuuli): Review Controller ownership. Mutexes, semaphors, thread protection? Any shared resources?
+/// @file midiclockout.cpp
+/// @brief This class manages a Midi clock output (0xF8, 0xFA, 0xFB, 0xFC).
+
+// TODO(Tuuli): Review Controller ownership. Mutexes, semaphores, thread
+// protection? Any shared resources?
 
 // TODO(Tuuli): write tests
 
 // TODO(Tuuli): Check #include scope for .cpp vs .h and move for code quality
 
-// TODO(XXX): Audio playback / bpm is noticeably slower when mixxx isnt the focussed window; no difference with/without MCO enabled
+// TODO(XXX): Audio playback / bpm is noticeably slower when mixxx isn't the
+// focussed window; no difference with/without MCO enabled
 
-// TODO(Tuuli): midi out methods, 0xF8, and selecting a Midi device in a controller-mapping, controller thread. 
-// Would it make sense to use MidiThroughPort, or open a similar virtual port, for MidiClockOut signals?
-// Testing qObject->parent() recursion failed; looks like EngineSync doesnt have a parent assigned.
-// Using CoreServices to Connect events across threads, and detecting controllers that have Midi Clock Out assigned to send over the pointer to it.
-// Make Controller::sendBytes() invokable, or add a slotSendBytes? Should MidiClockOutThread use the Controller resource directly, or via signal/slots that allow messages to be sent in the Controller thread?
+// TODO(Tuuli): midi out methods, 0xF8, and selecting a Midi device in a
+// controller-mapping, controller thread. Would it make sense to use
+// MidiThroughPort, or open a similar virtual port, for MidiClockOut signals?
+// Testing qObject->parent() recursion failed; looks like EngineSync does not have
+// a parent assigned. Using CoreServices to Connect events across threads, and
+// detecting controllers that have Midi Clock Out assigned to send over the
+// pointer to it. Make Controller::sendBytes() invocable, or add a
+// slotSendBytes? Should MidiClockOutThread use the Controller resource
+// directly, or via signal/slots that allow messages to be sent in the
+// Controller thread?
 
-// TODO(Tuuli): Should portMidi device have a buffer and timestamps? It might help, for beatjumping ahead especially.. Saw this too... " warning [Controller] PortMidi error: PortMidi: Buffer overflow" is that the output or input buffer? Does the event queue act as a buffer of-sorts for portmidicontroller output?
-// TODO(Tuuli) Sequence is vital for MIDI messages; make sure they are never sent out of order. How is this handled? Start-Stop is very different outcome from Stop-Start. Events are always delivered in-order by Qt.
-// TODO(XXX) Fix the PortMidiController::sendBytes or Controller MIDI message parser? Is Arduinos MIDI.h open-source compatible with Mixxx, can we use that? Controller::sendBytes doesnt work for non-sysex Midi messages and assumes all messages are sysex... but its the only inherited MIDI sending function that exists in the Controller class. Currently hacked to allow F8, FA, FB, FC
+// TODO(Tuuli): Should portMidi device have a buffer and timestamps? It might
+// help, for beatjumping ahead especially.. Saw this too... " warning
+// [Controller] PortMidi error: PortMidi: Buffer overflow" is that the output or
+// input buffer? Does the event queue act as a buffer of-sorts for
+// portmidicontroller output?
+// TODO(Tuuli) Sequence is vital for MIDI messages; make sure they are never
+// sent out of order. How is this handled? Start-Stop is very different outcome
+// from Stop-Start. Events are always delivered in-order by Qt.
+// TODO(XXX) Fix the PortMidiController::sendBytes or Controller MIDI message
+// parser? Is Arduinos MIDI.h open-source compatible with Mixxx, can we use
+// that? Controller::sendBytes does not work for non-sysex Midi messages and
+// assumes all messages are sysex... but its the only inherited MIDI sending
+// function that exists in the Controller class. Currently hacked to allow F8,
+// FA, FB, FC
 
-// TODO(Tuuli) Sync. 
-// - should MidiClockOut be one of EngineSync::m_syncables? Probably not; m_syncables is used to choose sync leaders
-// - beatDistance isnt as simple as I thought. For now MCO doesnt follow since it doesnt make sense to follow it until it's decoded [For example it sends a beatDistance of 3 or -3 for beatjumps of 4; and 2 and 1 beatjump sizes are not distinguishable once they reach updateLeaderBeatDistance(beatDistance)]
-// - review logic in updateLeaderBeatDistance and EngineSync::reinitLeaderParams and how MidiClockOut::m_enabled and MidiClockOut::m_uniquePlaying is set and used. 
+// TODO(Tuuli) Sync.
+// - should MidiClockOut be one of EngineSync::m_syncables? Probably not;
+// m_syncables is used to choose sync leaders
+// - beatDistance isn't as simple as I thought. For now MCO does not follow since
+// it does not make sense to follow it until it's decoded [For example it sends a
+// beatDistance of 3 or -3 for beatjumps of 4; and 2 and 1 beatjump sizes are
+// not distinguishable once they reach updateLeaderBeatDistance(beatDistance)]
+// - review logic in updateLeaderBeatDistance and EngineSync::reinitLeaderParams
+// and how MidiClockOut::m_enabled and MidiClockOut::m_uniquePlaying is set and
+// used.
 // -- Decks might be: Playing, Not playing, Sync-followed, Sync-leader.
 // -- Controls might be: Start, stop, cuepoint, beatjump, loop
 
-// TODO(Tuuli): Send Continue FB on Enable without a stop; check if Stop-Start is best approach for restart, or if just Start will be sufficient as a default. Add settings option to enable Continue messages for users to choose what their sequencers receive
- 
+// TODO(Tuuli): Send Continue FB on Enable without a stop; check if Stop-Start is
+// best approach for restart, or if just Start will be sufficient as a default.
+// Add settings option to enable Continue messages for users to choose what their
+// sequencers receive
+
 // TODO(Tuuli): MidiClockOut should be controllable if its the only item playing.
     // The clock should keep playing at the previous tempo;
     // BUT... how to change tempo now? To drive external synths?
-    
-    // Could have a deck's tempo-fader mapped, and grab the last clock leaders
-    // fader to now control the MIDI Clock. EngineSync::updateLeaderBpm is triggered by stopped Leader decks, and fwds the bpm to MidiClockOut, this seems desireable
-     
-    // We could have a pre-programmed switch-over to internal clock (SYSEX)
-    // and midi.setTempo() to the current tempo as a fall-back, so that 
-    // external synths can use their own clocks if nothing is playing on Mixxx.
-    // Not all clock followers will support a SYSEX command to switch their clocks.
-    // But its probably the best we can do...
 
-// TODO(Tuuli): BUG Not grabbing BPM when another playing syncable becomes leader - fixed now? Test, and remove redundant BPM-hoarding..
-    //If not, find a way to get Bpm...
-    // auto otherBpm = m_pEngineSync->leaderBpm(); // private function
-    // auto otherBeatDistance = m_pEngineSync->leaderBaseBpm(); //private function
+// Could have a deck's tempo-fader mapped, and grab the last clock leaders
+// fader to now control the MIDI Clock. EngineSync::updateLeaderBpm is triggered
+// by stopped Leader decks, and fwds the bpm to MidiClockOut, this seems
+// desirable
 
-    // This is the bad way to do it... DONT TRY THIS; a hack, and not thread-safe...
-    // EngineChannel* pLeaderChannel = m_pEngineSync->getLeaderChannel();
-    // auto leaderBpm = pLeaderChannel->getEngineBuffer()->getBpm();
+// We could have a pre-programmed switch-over to internal clock (SYSEX)
+// and midi.setTempo() to the current tempo as a fall-back, so that
+// external synths can use their own clocks if nothing is playing on Mixxx.
+// Not all clock followers will support a SYSEX command to switch their clocks.
+// But its probably the best we can do...
 
-    // other experiments
-    //pLeaderChannel->EngineBuffer::getBpm()--
-    //  m_pBpmControl->BpmControl::getBpm() --
-    //      m_pEngineBpm->get() --
-    //          std::unique_ptr<ControlLinPotmeter> m_pEngineBpm --
-    //              ControlObject->get()->m_value.get()-- gets value atomically
+// TODO(Tuuli): BUG Not grabbing BPM when another playing syncable becomes
+// leader - fixed now? Test, and remove redundant BPM-hoarding..
+// If not, find a way to get Bpm...
+// auto otherBpm = m_pEngineSync->leaderBpm(); // private function
+// auto otherBeatDistance = m_pEngineSync->leaderBaseBpm(); //private function
 
-    //SyncControl::setEngineControls(BpmControl::pBpmControl)
+// This is the bad way to do it... DONT TRY THIS; a hack, and not thread-safe...
+// EngineChannel* pLeaderChannel = m_pEngineSync->getLeaderChannel();
+// auto leaderBpm = pLeaderChannel->getEngineBuffer()->getBpm();
 
-    // currently the clock doesnt adopt tempo of a new leader until that leader changes their BPM... fixed now?
-    // Need to capture a notice about the new leader and then pull their BPM.
+// other experiments
+// pLeaderChannel->EngineBuffer::getBpm()--
+//  m_pBpmControl->BpmControl::getBpm() --
+//      m_pEngineBpm->get() --
+//          std::unique_ptr<ControlLinPotmeter> m_pEngineBpm --
+//              ControlObject->get()->m_value.get()-- gets value atomically
+
+// SyncControl::setEngineControls(BpmControl::pBpmControl)
+
+// currently the clock does not adopt tempo of a new leader until that leader
+// changes their BPM... fixed now? Need to capture a notice about the new leader
+// and then pull their BPM.
 
 // Direct access to Controller:
-//TODO(Tuuli) BUG-FIXED Crashing when swapping mapped devices (probably garbage collection / pointer issues) Need to handle updates from ControllerManager similarly to initializing and shutdowns (probably can use the same functions / signals already wired up). I think it's fixed now, I added some more recycling and removal of old pointers in ControllerManager and CoreServices?
-// TODO(Tuuli) BUG Queued MIDI messages arent cleared when the controller is reopened in settings
-//TODO(Tuuli) BUG Why no messages received by MIDI-OX, was it just that portmidi errored out after a buffer overflow or something? Try to reproduce by crashing / overflowing portmidi and see what happens... Swapping devices seemed to fix it last time...
+// TODO(Tuuli) BUG-FIXED Crashing when swapping mapped devices (probably garbage
+// collection / pointer issues) Need to handle updates from ControllerManager
+// similarly to initializing and shutdowns (probably can use the same functions
+// / signals already wired up). I think it's fixed now, I added some more
+// recycling and removal of old pointers in ControllerManager and CoreServices?
+// TODO(Tuuli) BUG Queued MIDI messages aren't cleared when the controller is
+// reopened in settings
+// TODO(Tuuli) BUG Why no messages received by MIDI-OX, was it just that
+// portmidi errored out after a buffer overflow or something? Try to reproduce
+// by crashing / overflowing portmidi and see what happens... Swapping devices
+// seemed to fix it last time...
 
 #include "engine/sync/midiclockout.h"
 
@@ -218,7 +260,10 @@ MidiClockOut::~MidiClockOut() {
     m_pMidiClockPosBeats.reset();
     m_pMidiClockPosBars.reset();
 
-    // TODO(Tuuli): This is for destroying the pointer safely - but is redundant and late, ~MidiClockOut is when the Engine is deleted, which is last in the CoreServices::finalize() process and way after the controllers are shutdown and deleted. Instead, directly called before ~ControllerManager.
+    // TODO(Tuuli): This is for destroying the pointer safely - but is redundant
+    // and late, ~MidiClockOut is when the Engine is deleted, which is last in
+    // the CoreServices::finalize() process and way after the controllers are
+    // shutdown and deleted. Instead, directly called before ~ControllerManager.
     // deleteMidiClockOutController();
 
     qDebug() << "MidiClockOut::destroyed";
@@ -245,11 +290,14 @@ void MidiClockOut::slotControlOutEnabled(double controlButtonValue) {
     if (m_enabled) {
         sendMidiClockContinue(); // TODO(Tuuli) Setting for this to be start or continue
         m_pEngineSync->requestSyncMode(this, SyncMode::Follower); /// also queues reinitLeaderParams()
-        //m_pEngineSync->notifyPlayingAudible(this, true); // TODO(Tuuli): is this required? What does being audible affect for sync info?
+        // m_pEngineSync->notifyPlayingAudible(this, true); // TODO(Tuuli): is
+        //  this required? What does being audible affect for sync info?
     } else {
         sendMidiClockStop(); // TODO(Tuuli) Setting for this to be stop, or not sent
-        m_pEngineSync->requestSyncMode(this, SyncMode::None); // TODO(Tuuli): Does this do anything? It seems to only trigger reinitLeaderParams but not accept the request for "none" mode; instead sends back "Follower" via setSyncMode()
-        //m_pEngineSync->notifyPlayingAudible(this, false);
+        m_pEngineSync->requestSyncMode(this, SyncMode::None); // TODO(Tuuli): Does
+        // this do anything? It seems to only trigger reinitLeaderParams but not
+        // accept the request for "none" mode; instead sends back "Follower" via setSyncMode()
+        // m_pEngineSync->notifyPlayingAudible(this, false);
     }
 }
 
@@ -264,7 +312,10 @@ void MidiClockOut::slotControlTest(double controlButtonValue) {
     Q_UNUSED(controlButtonValue)
     qWarning() << "DEBUG: MidiClockOut::slotControlTest" << m_syncMode;
     //sendMidiClockTick();
-    m_pEngineSync->requestSyncMode(this, SyncMode::Follower); // triggers a leader to send updateLeaderSyncDistance and reinitLeaderParameters();
+    m_pEngineSync->requestSyncMode(
+            this, SyncMode::Follower); // triggers a leader to send
+                                       // updateLeaderSyncDistance and
+                                       // reinitLeaderParameters();
 }
 
 void MidiClockOut::slotControlNudgeFwd(double controlButtonValue) {
@@ -290,22 +341,27 @@ void MidiClockOut::notifyUniquePlaying() {
     qWarning() << "MidiClockOut::notifyUniquePlaying() Solo";
     m_uniquePlaying = true;
 }
-/// Notify a Syncable that they should sync phase; called after reinitLeaderParameters when a MidiClockOut requests Follower
+/// Notify a Syncable that they should sync phase; called after reinitLeaderParameters
+/// when a MidiClockOut requests Follower
 void MidiClockOut::requestSync() {
-    // updateLeaderBeatDistance(double beatDistance) handles the sync position update.
+    // updateLeaderBeatDistance(double beatDistance) handles the sync position
+    // update.
     //
-    // SyncControl::requestSync() calls m_pChannel->getEngineBuffer()->requestSyncPhase(); only.
-    // This queues a phase seek, then handled in EngineBuffer::processSeek() function
-    // It reads the current m_playPos and shapes it through these checks...
-    // syncPosition = m_pBpmControl->getBeatMatchPosition(m_playPos, true, true);
-    // position = m_pLoopingControl->getSyncPositionInsideLoop(m_playPos, syncPosition);
-    // It then calls EngineBuffer::setNewPlaypos(position) to set EngineBuffer::m_playPos if they arent equal
+    // SyncControl::requestSync() calls
+    // m_pChannel->getEngineBuffer()->requestSyncPhase(); only. This queues a
+    // phase seek, then handled in EngineBuffer::processSeek() function It reads
+    // the current m_playPos and shapes it through these checks... syncPosition
+    // = m_pBpmControl->getBeatMatchPosition(m_playPos, true, true); position =
+    // m_pLoopingControl->getSyncPositionInsideLoop(m_playPos, syncPosition); It
+    // then calls EngineBuffer::setNewPlaypos(position) to set
+    // EngineBuffer::m_playPos if they aren't equal
     //
     // EngineSync::requestSyncMode() calls:
     // reinitLeaderParams(pParamsSyncable);
     // pSyncable->updateInstantaneousBpm(pParamsSyncable->getBpm());
-    // if (pParamsSyncable != pSyncable && mode != SyncMode::None) pSyncable->requestSync();
-    
+    // if (pParamsSyncable != pSyncable && mode != SyncMode::None)
+    // pSyncable->requestSync();
+
     qDebug() << "MidiClockOut::requestSync() ";
 }
 /// Must NEVER return a mode that was not set directly via
@@ -335,16 +391,30 @@ double MidiClockOut::getBeatDistance() const {
     return partialBeats;
 }
 mixxx::Bpm MidiClockOut::getBaseBpm() const {
-    return m_currentBpm; // TODO(Tuuli): whats this for? Half/double?
+    return m_currentBpm; // TODO(Tuuli): what's this for? Half/double?
 }
 
 void MidiClockOut::updateLeaderBeatDistance(double beatDistance) {
     qDebug() << "MidiClockOut::updateLeaderBeatDistance()" << beatDistance;
     // TODO(Tuuli) add a setting or control for toggling following sync changes
-    // TODO(Tuuli) We dont store the desired offset between the tick position, and the music's beatDistance; need to get the live Leader_beatDistance at the time of a GUI enable or restart command? Desired offset is the beat 1 location when the DJ sets it... we can probably figure this out / track those intentional "set beat 1 NOW" interaction with MidiClockOut vs the DJ beatjumping the decks...
-    // TODO(Tuuli) Is there a way to know if the leader track is playing or not? This gets sent from both playing and non-playing tracks.. for beatjumps and cue point jumps. We dont want to sync a playing synth to track positions that arent playing. Created bool sourceIsPlaying in EngineSync::reinitLeaderParams for this, so updateLeaderBeatDistance() does not get sent unless a deck is leader (or could also allow AbletonLink::isPlaying(), once the bpm in EngineSync::reinitLeaderParams also comes from AbletonLink)
+    // TODO(Tuuli) We dont store the desired offset between the tick position,
+    // and the music's beatDistance; need to get the live Leader_beatDistance at
+    // the time of a GUI enable or restart command? Desired offset is the beat 1
+    // location when the DJ sets it... we can probably figure this out / track
+    // those intentional "set beat 1 NOW" interaction with MidiClockOut vs the
+    // DJ beatjumping the decks...
+    // TODO(Tuuli) Is there a way to know if the leader track is playing or not?
+    // This gets sent from both playing and non-playing tracks.. for beatjumps
+    // and cue point jumps. We dont want to sync a playing synth to track
+    // positions that aren't playing. Created bool sourceIsPlaying in
+    // EngineSync::reinitLeaderParams for this, so updateLeaderBeatDistance()
+    // does not get sent unless a deck is leader (or could also allow
+    // AbletonLink::isPlaying(), once the bpm in EngineSync::reinitLeaderParams
+    // also comes from AbletonLink)
 
-    /// When a deck moves the beatDistance, follow and queue up a tickSyncAdjustment if the clock is enabled. Only follow sync beatDistance if there is another deck playing; assume the params come from that playing deck
+    /// When a deck moves the beatDistance, follow and queue up a tickSyncAdjustment
+    /// if the clock is enabled. Only follow sync beatDistance if there is another
+    /// deck playing; assume the params come from that playing deck
     if (m_enabled && !m_uniquePlaying) {
         auto threadSyncOffset = m_pMidiClockOutThread->setBeatPosFromBeatDistanceAt(std::chrono::steady_clock::now(), beatDistance);
         m_pMidiClockOutThread->addPendingSyncAdjustment(threadSyncOffset); // TODO(Tuuli) Add a sync-follow setting
@@ -356,7 +426,8 @@ void MidiClockOut::forceUpdateLeaderBeatDistance(double beatDistance) {
     updateLeaderBeatDistance(beatDistance);
 }
 
-// SyncControl::slotRateChanged() (Syncable leader's synccontrol) calls m_pEngineSync->notifyRateChanged(this, bpm / m_leaderBpmAdjustFactor);
+// SyncControl::slotRateChanged() (Syncable leader's synccontrol) calls
+// m_pEngineSync->notifyRateChanged(this, bpm / m_leaderBpmAdjustFactor);
 // EngineSync::notifyRateChanged calls EngineSync::updateLeaderBpm(pSyncable source, bpm);
 void MidiClockOut::updateLeaderBpm(mixxx::Bpm bpm) {
     qWarning() << "DEBUG: MidiClockOut::updateLeaderBpm() " << bpm.value();
@@ -378,7 +449,10 @@ void MidiClockOut::notifyLeaderParamSource() {
 void MidiClockOut::reinitLeaderParams(double beatDistance, mixxx::Bpm, mixxx::Bpm bpm) {
     // Only follow beatDistance if another deck is playing
     Syncable* pSyncTarget = nullptr;
-    pSyncTarget = m_pEngineSync->pickNonSyncSyncTarget(nullptr); // the leader (playing or stopped), or a playing synced deck, or a non-synced playing deck
+    pSyncTarget = m_pEngineSync->pickNonSyncSyncTarget(
+            nullptr); // the leader
+                      // (playing or stopped), or a playing synced deck, or a
+                      // non-synced playing deck
     if (pSyncTarget) {
         if (!pSyncTarget->isPlaying()) { // pSyncTarget->isSynchronized()
             if (isLeader(pSyncTarget->getSyncMode())) {
@@ -394,7 +468,10 @@ void MidiClockOut::reinitLeaderParams(double beatDistance, mixxx::Bpm, mixxx::Bp
         }
     }
     if (pSyncTarget) {
-        m_uniquePlaying = false; // Set this as false when there is a sync deck playing playing, so we know if updateLeaderBeatDistance info is from a playing deck
+        m_uniquePlaying =
+                false; // Set this as false when there is a sync deck
+                       // playing, so we know if updateLeaderBeatDistance info
+                       // is from a playing deck
         qWarning() << "DEBUG: MidiClockOut::reinitLeaderParams found another playing target " << pSyncTarget->getGroup();
     } else {
         m_uniquePlaying = true; 
@@ -414,11 +491,15 @@ void MidiClockOut::updateInstantaneousBpm(mixxx::Bpm bpm) {
 // Class functions
 
 void MidiClockOut::forceGetBeatDistance() {
-    // TODO(Tuuli): Can we safely ask for the current beatDistance? Does requestSync() trigger updateLeaderBeatDistance() calls if the requestSync() results in a beatDistance change?
-    // TODO(Tuuli): Is there another / correct way to get the leaders phase? Syncable::getBaseBpm() and m_pEngineSync->pickNonSyncSyncTarget() ...getEngineBuffer has a comment to remove it as its a hack. Replace with?
-    // EngineChannel* pLeaderChannel = m_pEngineSync->getLeaderChannel(); 
-    // bool leaderActive = pLeaderChannel->isActive();
-    // newBeatDistance = pLeaderChannel->getEngineBuffer()->getExactPlayPos();
+    // TODO(Tuuli): Can we safely ask for the current beatDistance? Does
+    //   requestSync() trigger updateLeaderBeatDistance() calls if the requestSync()
+    //   results in a beatDistance change?
+    // TODO(Tuuli): Is there another / correct way to get the leaders phase?
+    //   Syncable::getBaseBpm() and m_pEngineSync->pickNonSyncSyncTarget() ...
+    //   getEngineBuffer has a comment to remove it as its a hack. Replace with?
+    //   EngineChannel* pLeaderChannel = m_pEngineSync->getLeaderChannel();
+    //   bool leaderActive = pLeaderChannel->isActive();
+    //   newBeatDistance = pLeaderChannel->getEngineBuffer()->getExactPlayPos();
 
     // BpmControl::calcSyncAdjustment handles sync.
     // BpmControl::m_dSyncTargetBeatDistance stores the beatDistance
@@ -523,7 +604,10 @@ void MidiClockOut::fwdSixteenth() {
 
 void MidiClockOut::backSixteenth() {
     qDebug() << "MidiClockOut::backSixteenth()";
-    // TODO(Tuuli): dont add negative ticks if they are large or theres no room to back up. Tick-driven sequencers cannot go backwards, so they will pause when the clock is skipping / waiting; meaning silence or perhaps reverb / effects playing out. Label any backwards skips as a PAUSE.
+    // TODO(Tuuli): dont add negative ticks if they are large or there's no room
+    // to back up. Tick-driven sequencers cannot go backwards, so they will
+    // pause when the clock is skipping / waiting; meaning silence or perhaps
+    // reverb / effects playing out. Label any backwards skips as a PAUSE.
     m_pMidiClockOutThread->addPendingSyncAdjustment((int16_t)(-6));
 
     // if (m_tickCount >= 6) {

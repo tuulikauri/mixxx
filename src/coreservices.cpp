@@ -46,6 +46,7 @@
 #include "qml/qmleffectsmanagerproxy.h"
 #include "qml/qmllibraryproxy.h"
 #include "qml/qmlplayermanagerproxy.h"
+#include "qml/qmlpreferencesproxy.h"
 #include "qml/qmlsoundmanagerproxy.h"
 #endif
 #include "soundio/soundmanager.h"
@@ -74,6 +75,7 @@
 
 #if defined(Q_OS_LINUX) && QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 #include <X11/Xlibint.h>
+
 #include <QtX11Extras/QX11Info>
 
 #include "engine/channelhandle.h"
@@ -441,6 +443,30 @@ void CoreServices::initializeSettings() {
     }
 #endif
     QString settingsPath = m_cmdlineArgs.getSettingsPath();
+
+    // Verify we can access the custom settings directory. If it is unwritable
+    // (e.g. due to macOS sandboxing, or restricted filesystem permissions),
+    // prompt the user to grant access or select a new location.
+    // See https://github.com/mixxxdj/mixxx/issues/15489
+    if (m_cmdlineArgs.getSettingsPathSet()) {
+        if (!Sandbox::ensureSettingsPathAccessible(&settingsPath)) {
+            // The user either declined the permission dialog or the
+            // folder remains unwritable. Show a clear error and exit.
+            QMessageBox::critical(nullptr,
+                    tr("Cannot access settings folder"),
+                    tr("Mixxx cannot access the settings folder:"
+                       "\n\n%1\n\n"
+                       "You can either:\n\n"
+                       "\u2022 Remove the --settings-path argument to use the "
+                       "default location\n"
+                       "\u2022 Re-run Mixxx and select a valid folder when prompted\n\n"
+                       "Click OK to exit.")
+                            .arg(settingsPath),
+                    QMessageBox::Ok);
+            exit(1);
+        }
+    }
+
     m_pSettingsManager = std::make_unique<SettingsManager>(settingsPath);
 }
 
@@ -679,7 +705,8 @@ void CoreServices::initialize(QApplication* pApp) {
         QString fd = QFileDialog::getExistingDirectory(nullptr,
                 tr("Choose music library directory"),
                 QStandardPaths::writableLocation(
-                        QStandardPaths::MusicLocation));
+                        QStandardPaths::MusicLocation),
+                QFileDialog::ShowDirsOnly);
 #endif
         // request to add directory to database.
         if (!fd.isEmpty() && m_pLibrary->requestAddDir(fd)) {
@@ -757,7 +784,9 @@ void CoreServices::initialize(QApplication* pApp) {
     // Load tracks in args.qlMusicFiles (command line arguments) into player
     // 1 and 2:
     const QList<QString>& musicFiles = m_cmdlineArgs.getMusicFiles();
-    for (int i = 0; i < (int)m_pPlayerManager->numDecks() && i < musicFiles.count(); ++i) {
+    const int numTracks = std::min(m_pPlayerManager->numberOfDecks(),
+            static_cast<int>(musicFiles.count()));
+    for (int i = 0; i < numTracks; ++i) {
         if (SoundSourceProxy::isFileNameSupported(musicFiles.at(i))) {
             m_pPlayerManager->slotLoadToDeck(musicFiles.at(i), i + 1);
         }
@@ -790,6 +819,9 @@ void CoreServices::initializeQMLSingletons() {
     mixxx::qml::QmlConfigProxy::registerUserSettings(getSettings());
     mixxx::qml::QmlLibraryProxy::registerLibrary(getLibrary());
     mixxx::qml::QmlSoundManagerProxy::registerManager(getSoundManager());
+    mixxx::qml::QmlControllerManagerProxy::registerManager(
+            getControllerManager(),
+            CmdlineArgs::Instance().getControllerPreviewScreens());
 
     ControllerScriptEngineBase::registerTrackCollectionManager(getTrackCollectionManager());
 
@@ -852,11 +884,11 @@ void CoreServices::initializeKeyboard() {
 void CoreServices::slotOptionsKeyboard(bool toggle) {
     UserSettingsPointer pConfig = m_pSettingsManager->settings();
     if (toggle) {
-        //qDebug() << "Enable keyboard shortcuts/mappings";
+        // qDebug() << "Enable keyboard shortcuts/mappings";
         m_pKeyboardEventFilter->setKeyboardConfig(m_pKbdConfig.get());
         pConfig->set(ConfigKey("[Keyboard]", "Enabled"), ConfigValue(1));
     } else {
-        //qDebug() << "Disable keyboard shortcuts/mappings";
+        // qDebug() << "Disable keyboard shortcuts/mappings";
         m_pKeyboardEventFilter->setKeyboardConfig(m_pKbdConfigEmpty.get());
         pConfig->set(ConfigKey("[Keyboard]", "Enabled"), ConfigValue(0));
     }
@@ -866,13 +898,35 @@ bool CoreServices::initializeDatabase() {
     kLogger.info() << "Connecting to database";
     QSqlDatabase dbConnection = mixxx::DbConnectionPooled(m_pDbConnectionPool);
     if (!dbConnection.isOpen()) {
+        QString settingsPath = m_pSettingsManager->settings()->getSettingsPath();
+        QFileInfo settingsInfo(settingsPath);
+
+        QString errorDetail;
+        if (!settingsInfo.exists()) {
+            errorDetail = tr(
+                    "The settings directory does not exist:\n%1\n\n"
+                    "Please verify the --settings-path argument.")
+                                  .arg(settingsPath);
+        } else if (!settingsInfo.isWritable()) {
+            errorDetail = tr(
+                    "The settings directory is not writable:\n%1\n\n"
+                    "This may be caused by macOS sandbox restrictions "
+                    "if you are using a custom --settings-path outside "
+                    "the app container.\n\n"
+                    "Try running Mixxx without --settings-path, or "
+                    "grant Mixxx access to the folder when prompted.")
+                                  .arg(settingsPath);
+        } else {
+            errorDetail = tr(
+                    "Unable to establish a database connection.\n"
+                    "Mixxx requires Qt with SQLite support. Please read "
+                    "the Qt SQL driver documentation for information on how "
+                    "to build it.");
+        }
+
         QMessageBox::critical(nullptr,
                 tr("Cannot open database"),
-                tr("Unable to establish a database connection.\n"
-                   "Mixxx requires QT with SQLite support. Please read "
-                   "the Qt SQL driver documentation for information on how "
-                   "to build it.\n\n"
-                   "Click OK to exit."),
+                errorDetail + QStringLiteral("\n\n") + tr("Click OK to exit."),
                 QMessageBox::Ok);
         return false;
     }
@@ -912,6 +966,7 @@ void CoreServices::finalize() {
     mixxx::qml::QmlConfigProxy::registerUserSettings(nullptr);
     mixxx::qml::QmlLibraryProxy::registerLibrary(nullptr);
     mixxx::qml::QmlSoundManagerProxy::registerManager(nullptr);
+    mixxx::qml::QmlControllerManagerProxy::registerManager(nullptr);
 
     ControllerScriptEngineBase::registerTrackCollectionManager(nullptr);
 #endif

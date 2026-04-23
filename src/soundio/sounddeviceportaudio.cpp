@@ -2,6 +2,10 @@
 
 #include <float.h>
 
+#if __has_include(<valgrind/valgrind.h>)
+#include <valgrind/valgrind.h>
+#endif
+
 #include <QRegularExpression>
 #include <QThread>
 #include <QtDebug>
@@ -120,7 +124,10 @@ SoundDevicePortAudio::SoundDevicePortAudio(UserSettingsPointer config,
           m_callbackResult(paAbort),
           m_hostTimeFilter(kNumPointsInHostTimeFilter),
           m_cummulatedBufferTime(0),
-          m_meanOutputLatency(MovingInterquartileMean(128)) {
+          m_meanOutputLatency(MovingInterquartileMean(128)),
+          m_pExternalSyncLatencyCompensation(std::make_unique<ControlProxy>(
+                  QStringLiteral("[Master]"),
+                  QStringLiteral("externalSyncLatencyCompensation"))) {
     // Setting parent class members:
     m_hostAPI = Pa_GetHostApiInfo(deviceInfo->hostApi)->name;
     m_sampleRate = mixxx::audio::SampleRate::fromDouble(deviceInfo->defaultSampleRate);
@@ -1052,9 +1059,16 @@ int SoundDevicePortAudio::callbackProcessClkRef(
         // verify if flush to zero or denormals to zero works
         // test passes if one of the two flag is set.
         volatile double doubleMin = DBL_MIN; // the smallest normalized double
-        VERIFY_OR_DEBUG_ASSERT(doubleMin / 2 == 0.0) {
-            qWarning() << "Denormals to zero mode is not working. EQs and effects may suffer high CPU load";
-        } else {
+#if __has_include(<valgrind/valgrind.h>)
+        if (RUNNING_ON_VALGRIND) {
+            qDebug() << "Skipping denormals to zero check: running under Valgrind";
+        } else
+#endif
+            VERIFY_OR_DEBUG_ASSERT(doubleMin / 2 == 0.0) {
+                qWarning() << "Denormals to zero mode is not working. EQs and "
+                              "effects may suffer high CPU load";
+            }
+        else {
             qDebug() << "Denormals to zero mode is working";
         }
     }
@@ -1148,8 +1162,7 @@ void SoundDevicePortAudio::updateCallbackEntryToDacTime(
     //
     // SLC2 + CED2 = CED1 + DAC  -> 8 + 14 = 12 + 10
 
-    PaTime callbackEntrytoDacSecs = timeInfo->outputBufferDacTime
-            - timeInfo->currentTime;
+    PaTime callbackEntrytoDacSecs = timeInfo->outputBufferDacTime - timeInfo->currentTime;
     double bufferSizeSec = framesPerBuffer / m_sampleRate.toDouble();
 
     // Use HostTimeFilter class to create a smooth linear regression
@@ -1168,31 +1181,38 @@ void SoundDevicePortAudio::updateCallbackEntryToDacTime(
         filteredHostTimeNow = hostTime;
     }
 
-    if (CmdlineArgs::Instance().getDeveloper()) {
-        qWarning() << "Pa_GetStreamTime: "
-                   << static_cast<long long>(soundCardTimeNow * 1000000)
-                   << "timeInfo->currentTime: "
-                   << static_cast<long long>(timeInfo->currentTime * 1000000)
-                   << "timeInfo->outputBufferDacTime: "
-                   << static_cast<long long>(
-                              timeInfo->outputBufferDacTime * 1000000)
-                   << "m_absTimeWhenPrevOutputBufferReachesDac: "
-                   << m_absTimeWhenPrevOutputBufferReachesDac.count();
+    if (false) {
+        if (CmdlineArgs::Instance().getDeveloper()) {
+            qWarning() << "Pa_GetStreamTime: "
+                       << static_cast<long long>(soundCardTimeNow * 1000000)
+                       << "timeInfo->currentTime: "
+                       << static_cast<long long>(timeInfo->currentTime * 1000000)
+                       << "timeInfo->outputBufferDacTime: "
+                       << static_cast<long long>(
+                                  timeInfo->outputBufferDacTime * 1000000)
+                       << "m_absTimeWhenPrevOutputBufferReachesDac: "
+                       << m_absTimeWhenPrevOutputBufferReachesDac.count();
+        }
     }
 
     // Only use latency from PortAudios timeInfo, if it's in reasonable range,
     // otherwise use latency value from PortAudios streamInfo
+    auto externalSyncLatencyUs = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::duration<double, std::milli>(m_pExternalSyncLatencyCompensation->get()));
+
     if (callbackEntrytoDacSecs > kMinReasonableAudioLatencySecs &&
             timeSinceLastCbSecs < bufferSizeSec * 2) {
         m_meanOutputLatency.insert(timeInfo->outputBufferDacTime - soundCardTimeNow);
 
         m_absTimeWhenPrevOutputBufferReachesDac = filteredHostTimeNow +
-                std::chrono::microseconds(static_cast<long long>(
-                        m_meanOutputLatency.mean() * 1000000));
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::duration<double>(m_meanOutputLatency.mean())) +
+                externalSyncLatencyUs;
     } else {
         m_absTimeWhenPrevOutputBufferReachesDac = filteredHostTimeNow +
-                std::chrono::microseconds(
-                        static_cast<long long>(m_outputLatencyMillis * 1000));
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::duration<double, std::milli>(m_outputLatencyMillis)) +
+                externalSyncLatencyUs;
     }
 
     double diff = (timeSinceLastCbSecs + callbackEntrytoDacSecs) -

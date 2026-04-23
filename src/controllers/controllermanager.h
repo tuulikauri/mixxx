@@ -47,6 +47,7 @@ class ControllerManager : public QObject {
     Controller* getMidiClockOutControllerPtr(); ///< Currently unused.
 
   signals:
+    void initialized();
     void devicesChanged();
     void requestSetUpDevices();
     void requestShutdown();

@@ -75,6 +75,8 @@ DlgPrefSound::DlgPrefSound(QWidget* pParent,
           m_pSettings(pSettings),
           m_config(pSoundManager.get()),
           m_pLatencyCompensation(kMasterGroup, QStringLiteral("microphoneLatencyCompensation")),
+          m_pExternalSyncLatencyCompensation(
+                  kMasterGroup, QStringLiteral("externalSyncLatencyCompensation")),
           m_pMainDelay(kMasterGroup, QStringLiteral("delay")),
           m_pHeadDelay(kMasterGroup, QStringLiteral("headDelay")),
           m_pBoothDelay(kMasterGroup, QStringLiteral("boothDelay")),
@@ -155,6 +157,8 @@ DlgPrefSound::DlgPrefSound(QWidget* pParent,
     }
 
     latencyCompensationSpinBox->setValue(m_pLatencyCompensation.get());
+    externalSyncLatencyCompensationSpinBox->setValue(
+            m_pExternalSyncLatencyCompensation.get());
     latencyCompensationWarningLabel->setWordWrap(true);
     mainDelaySpinBox->setValue(m_pMainDelay.get());
     headDelaySpinBox->setValue(m_pHeadDelay.get());
@@ -167,6 +171,10 @@ DlgPrefSound::DlgPrefSound(QWidget* pParent,
             QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this,
             &DlgPrefSound::latencyCompensationSpinboxChanged);
+    connect(externalSyncLatencyCompensationSpinBox,
+            QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this,
+            &DlgPrefSound::externalSyncLatencyCompensationSpinboxChanged);
     connect(mainDelaySpinBox,
             QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this,
@@ -263,6 +271,11 @@ DlgPrefSound::DlgPrefSound(QWidget* pParent,
             kAppGroup, QStringLiteral("output_latency_ms"), this);
     m_pOutputLatencyMs->connectValueChanged(this, &DlgPrefSound::outputLatencyChanged);
 
+    connect(btnResetBufferUnderflowCount,
+            &QPushButton::clicked,
+            this,
+            &DlgPrefSound::slotResetUnderflowCounter);
+
     // TODO: remove this option by automatically disabling/enabling the main mix
     // when recording, broadcasting, headphone, and main outputs are enabled/disabled
     m_pMainEnabled =
@@ -334,6 +347,11 @@ DlgPrefSound::DlgPrefSound(QWidget* pParent,
                     tr("Find details in the Mixxx user manual"),
                     MIXXX_MANUAL_OUTPUT_AND_INPUT_DEVICES);
     deckBusHint->setText(deckBusHintStr);
+
+    // Append a ':' to separate latency/underflow labels from values.
+    // (append here to keep existing tr strings)
+    latencyLabel->setText(latencyLabel->text() + ':');
+    underflowLabel->setText(underflowLabel->text() + ':');
 }
 
 /// Slot called when the preferences dialog is opened.
@@ -953,6 +971,8 @@ void DlgPrefSound::slotResetToDefaults() {
                     static_cast<int>(EngineMixer::MicMonitorMode::Main)));
 
     latencyCompensationSpinBox->setValue(latencyCompensationSpinBox->minimum());
+    externalSyncLatencyCompensationSpinBox->setValue(0.0);
+    m_pExternalSyncLatencyCompensation.set(0.0);
 
     settingChanged();
 #ifdef __RUBBERBAND__
@@ -965,6 +985,10 @@ void DlgPrefSound::bufferUnderflow(double count) {
     update();
 }
 
+void DlgPrefSound::slotResetUnderflowCounter() {
+    m_pSoundManager->resetUnderflowCount();
+}
+
 void DlgPrefSound::outputLatencyChanged(double latency) {
     currentLatency->setText(QString("%1 ms").arg(latency));
     update();
@@ -973,6 +997,10 @@ void DlgPrefSound::outputLatencyChanged(double latency) {
 void DlgPrefSound::latencyCompensationSpinboxChanged(double value) {
     m_pLatencyCompensation.set(value);
     checkLatencyCompensation();
+}
+
+void DlgPrefSound::externalSyncLatencyCompensationSpinboxChanged(double value) {
+    m_pExternalSyncLatencyCompensation.set(value);
 }
 
 void DlgPrefSound::mainDelaySpinboxChanged(double value) {

@@ -101,19 +101,6 @@ class AbletonLink : public QObject, public Syncable {
     void onCallbackEnd(int sampleRate, size_t bufferSize);
 
   private:
-    ableton::link::HostTimeFilter<MixxxClockRef> m_hostTimeFilter;
-    QString m_group;
-    EngineSync* m_pEngineSync; // unowned, must outlive this.
-    SyncMode m_syncMode;
-
-    mixxx::Bpm m_oldTempo;
-
-    std::chrono::microseconds m_absTimeWhenPrevOutputBufferReachesDac;
-
-    std::unique_ptr<ableton::BasicLink<MixxxClockRef>> m_pLink;
-    std::unique_ptr<ControlPushButton> m_pLinkButton;
-    std::unique_ptr<ControlObject> m_pNumLinkPeers;
-
     void slotControlSyncEnabled(double value);
 
     std::chrono::microseconds getHostTime() const;
@@ -125,8 +112,19 @@ class AbletonLink : public QObject, public Syncable {
         return 1.0;
     }
 
-    // Test/Debug code
-
-    /// Link getters to call from audio thread.
+    /// Test/Debug code - To be call from audio thread.
     void audioThreadDebugOutput();
+
+    ableton::link::HostTimeFilter<MixxxClockRef> m_hostTimeFilter;
+    QString m_group;
+    EngineSync* m_pEngineSync; // borrowed, must outlive this.
+    SyncMode m_syncMode;
+
+    mixxx::Bpm m_oldTempo;
+
+    std::chrono::microseconds m_absTimeWhenPrevOutputBufferReachesDac;
+
+    std::unique_ptr<ableton::BasicLink<MixxxClockRef>> m_pLink;
+    std::unique_ptr<ControlPushButton> m_pLinkButton;
+    std::unique_ptr<ControlObject> m_pNumLinkPeers;
 };

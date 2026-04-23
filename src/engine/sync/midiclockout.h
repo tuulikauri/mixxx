@@ -1,3 +1,5 @@
+/// @file midiclockout.h
+/// @brief This class manages a Midi clock output (0xF8, 0xFA, 0xFB, 0xFC).
 #pragma once
 #include <ableton/platforms/stl/Clock.hpp>
 #include <chrono>
@@ -10,9 +12,10 @@
 #include "engine/sync/syncable.h"
 #include "engine/sync/synccontrol.h"
 
-/// This class manages a Midi clock output (0xF8, 0xFA, 0xFB, 0xFC)
-
-/// This class manages a Midi clock output (0xF8). It prioritizes maintaining the
+/// @brief This class manages a Midi clock output (0xF8, 0xFA, 0xFB, 0xFC).
+/// @callergraph
+/// @callgraph
+/// This prioritizes maintaining the
 /// user-selected beat_distance, so the external sequencers are aligned to the beat
 /// grid in Mixxx.
 /// Object is initialized in EngineSync constructor

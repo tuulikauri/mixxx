@@ -134,7 +134,7 @@ ControllerManager::ControllerManager(UserSettingsPointer pConfig)
 }
 
 ControllerManager::~ControllerManager() {
-    emit deleteMidiClockOut(m_midiClockOutControllerName); // TODO(Tuuli) Why isnt this reaching MidiClockOutThread quickly? Takes 10ms or more and the controller is deleted long before the thread is notified
+    emit deleteMidiClockOut(m_midiClockOutControllerName); // TODO(Tuuli) Why isn't this reaching MidiClockOutThread quickly? Takes 10ms or more and the controller is deleted long before the thread is notified
     emit requestShutdown();
     m_pThread->wait();
     delete m_pThread;
@@ -169,6 +169,7 @@ void ControllerManager::slotInitialize() {
 #ifdef __HID__
     m_enumerators.append(new HidEnumerator());
 #endif
+    emit initialized();
 }
 
 void ControllerManager::slotShutdown() {
